@@ -511,7 +511,7 @@ def rutina_diaria(conn, dias_atras=3, fuente="todas"):
 def main():
     parser = argparse.ArgumentParser(description="Pipeline ETL de Sismos USGS y CSN (Chile) para PostgreSQL")
     parser.add_argument("--modo", choices=["diario", "historico"], default="diario",
-                        help="Modo de ejecución: 'diario' (últimos días) o 'historico' (1964 a hoy)")
+                        help="Modo de ejecución: 'diario' (últimos días) o 'historico' (1960 a hoy)")
     parser.add_argument("--fuente", choices=["todas", "usgs", "csn"], default="todas",
                         help="Fuente de datos: 'todas' (USGS + CSN), 'usgs' o 'csn' (default: todas)")
     parser.add_argument("--dias", type=int, default=3, help="Días hacia atrás en modo diario (default: 3)")
@@ -525,9 +525,9 @@ def main():
             log.info("=== INICIANDO CARGA HISTÓRICA COMPLETA ===")
 
             if args.fuente in ("todas", "usgs"):
-                # Tramo 1: 1964 a 1979 (M >= 5.0) en bloques trimestrales
-                log.info("Fase 1: Extrayendo 1964 a 1979 con M >= 5.0...")
-                t1 = correr_tramo(conn, datetime(1964, 1, 1), datetime(1980, 1, 1), min_mag=5.0, step_months=3)
+                # Tramo 1: 1960 a 1979 (M >= 5.0) en bloques trimestrales (incluye Gran Terremoto de Valdivia 1960)
+                log.info("Fase 1: Extrayendo 1960 a 1979 con M >= 5.0 (incluye Terremoto de Valdivia 1960)...")
+                t1 = correr_tramo(conn, datetime(1960, 1, 1), datetime(1980, 1, 1), min_mag=5.0, step_months=3)
 
                 # Tramo 2: 1980 a la fecha (M >= 4.0) en bloques mensuales
                 log.info("Fase 2: Extrayendo 1980 hasta hoy con M >= 4.0...")
