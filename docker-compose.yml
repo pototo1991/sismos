@@ -1,6 +1,19 @@
 # Producción (knossos):  docker compose -f docker-compose.yml up -d --build
 # Desarrollo (WSL2):     docker compose up --build   (aplica docker-compose.override.yml)
 services:
+  db:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: sismos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-sismos-db}
+      POSTGRES_USER: ${DB_USER:-sismos_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - sismos_data:/var/lib/postgresql/data
+
   web:
     build:
       context: .
@@ -9,10 +22,15 @@ services:
     container_name: sismos-web
     env_file: .env
     ports:
-      - "${API_BIND:-127.0.0.1}:${API_PORT:-8000}:8000"
+      - "${API_BIND:-0.0.0.0}:${API_PORT:-8090}:8000"
+    depends_on:
+      - db
     restart: unless-stopped
     read_only: true
     tmpfs:
       - /tmp
     security_opt:
       - no-new-privileges:true
+
+volumes:
+  sismos_data:
