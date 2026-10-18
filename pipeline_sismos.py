@@ -21,10 +21,26 @@ CSN_HEADERS = {
 }
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pipeline_sismos.log")
 
+# Cargar automáticamente variables desde .env si existe
+def _cargar_env():
+    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.isfile(env_file):
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if k and k not in os.environ:
+                        os.environ[k] = v
+
+_cargar_env()
+
 # Variables de Base de Datos (tomadas de variables de entorno o valores por defecto)
 DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5434")
-DB_NAME = os.getenv("DB_NAME", "sismos_db")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "sismos-db")
 DB_USER = os.getenv("DB_USER", "sismos_user")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "TuPasswordSeguraAqui")
 DB_SSLMODE = os.getenv("DB_SSLMODE", "prefer")
