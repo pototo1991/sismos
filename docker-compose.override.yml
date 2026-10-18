@@ -3,6 +3,7 @@
 services:
   web:
     container_name: sismos-web-dev
+    depends_on: []
     environment:
       ENVIRONMENT: development
       FRONTEND_DIR: /app/frontend
