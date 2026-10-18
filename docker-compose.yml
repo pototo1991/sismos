@@ -1,0 +1,18 @@
+# Producción (knossos):  docker compose -f docker-compose.yml up -d --build
+# Desarrollo (WSL2):     docker compose up --build   (aplica docker-compose.override.yml)
+services:
+  web:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: sismos-web:latest
+    container_name: sismos-web
+    env_file: .env
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8000}:8000"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true

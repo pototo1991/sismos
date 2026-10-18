@@ -1,0 +1,13 @@
+# Overrides de DESARROLLO (WSL2). Docker Compose lo carga automáticamente.
+# En knossos NO copiar este archivo (o usar `-f docker-compose.yml`).
+services:
+  web:
+    container_name: sismos-web-dev
+    environment:
+      ENVIRONMENT: development
+      FRONTEND_DIR: /app/frontend
+    volumes:
+      - ./backend/app:/app/app:ro
+      - ./frontend:/app/frontend:ro
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    restart: "no"
