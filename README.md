@@ -88,8 +88,8 @@ flowchart TD
 
 ### 1. Clonar el repositorio
 ```bash
-git clone https://github.com/tu-usuario/sismos-web.git
-cd sismos-web
+git clone https://github.com/pototo1991/sismos.git
+cd sismos
 ```
 
 ### 2. Configurar variables de entorno
