@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from psycopg import sql
 
@@ -182,6 +182,14 @@ def get_sismos(
     def _num(v):
         return float(v) if v is not None else None
 
+    def _clean_text(v):
+        if not v or "Ã" not in v:
+            return v
+        try:
+            return v.encode("latin1").decode("utf-8")
+        except Exception:
+            return v
+
     features = [
         {
             "type": "Feature",
@@ -192,7 +200,7 @@ def get_sismos(
                 "magnitud": _num(r["magnitud"]),
                 "tipo_magnitud": r["tipo_magnitud"],
                 "profundidad_km": _num(r["profundidad_km"]),
-                "referencia": r["lugar"],
+                "referencia": _clean_text(r["lugar"]),
                 "pais": r["pais_inferido"],
                 "intensidad_mmi": _num(r["intensidad_mmi"]),
                 "alerta_tsunami": bool(r["alerta_tsunami"]),
@@ -209,9 +217,19 @@ def get_sismos(
 if FRONTEND_DIR.is_dir():
     app.mount("/css", StaticFiles(directory=FRONTEND_DIR / "css"), name="css")
     app.mount("/js", StaticFiles(directory=FRONTEND_DIR / "js"), name="js")
+    assets_dir = FRONTEND_DIR / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
     data_dir = FRONTEND_DIR / "data"
     if data_dir.is_dir():
         app.mount("/data", StaticFiles(directory=data_dir), name="data")
+
+    @app.api_route("/favicon.ico", methods=["GET", "HEAD"], include_in_schema=False)
+    def favicon():
+        favicon_path = FRONTEND_DIR / "assets" / "icon_sismos.png"
+        if favicon_path.is_file():
+            return FileResponse(favicon_path, media_type="image/png")
+        return Response(status_code=404)
 
     @app.get("/", include_in_schema=False)
     def index():

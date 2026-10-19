@@ -10,6 +10,7 @@ Integrada con una arquitectura de ingesta multi-fuente que combina datos interna
 
 ### 🗺️ Cartografía y Modos de Visualización
 - **Mapas Base Enriquecidos:** Selector interactivo entre *Modo Oscuro*, *Relieve Topográfico (Esri Shaded Relief)*, *Satélite de Alta Resolución* y *Calles (OSM)*.
+- **Planisferio sin Repetición de Continentes:** Renderizado limpio de escala mundial con teselas `noWrap: true`, límites estrictos del mundo (`maxBounds`, viscosidad 1.0) y zoom mínimo controlado (`minZoom: 2`), evitando continentes duplicados a los lados.
 - **3 Modos de Representación Sísmica:**
   - **Puntos Individuales:** Círculos escalados proporcionalmente por magnitud con código de color dinámico.
   - **Agrupamiento (Clustering):** Condensación de miles de eventos mediante `Leaflet.markercluster` con rendimiento optimizado.
@@ -21,13 +22,17 @@ Integrada con una arquitectura de ingesta multi-fuente que combina datos interna
 - **Tarjeta de Último Sismo Relevante:** Destacado visual con indicador pulsante, magnitud, profundidad, referencia geográfica y botón de enfoque inmediato en el mapa.
 - **Tiempos Relativos Humanizados:** Indicadores en español (*"Hace 4 min"*, *"Hace 2 h"*, *"Ayer"*) calculados dinámicamente en tiempo real.
 - **Alertas Sonoras y Toasts:** Campanilla armónica generada vía *Web Audio API* (sin archivos pesados, conmutable con botón 🔔/🔕) y notificaciones flotantes para sismos relevantes ($M \ge 4.5$).
+- **Identidad de Marca:** Favicon oficial (`icon_sismos.png`), soporte para `apple-touch-icon` y endpoint `/favicon.ico` integrado en FastAPI.
 
-### 📊 Analítica y Filtrado Bidireccional
+### 📊 Analítica y Filtrado Avanzado
+- **Panel de Filtros Modular por Pestañas:** Separación clara entre *"🎯 Criterios"* (ubicación, fechas, severidad) y *"🗺️ Capas & Leyenda"* (modos de visualización, mapas base, simbología).
+- **Selectores Desplegables con Búsqueda en Vivo:** Componentes predictivos para seleccionar país y regiones/comunas escribiendo el nombre.
 - **Sincronización Lista $\leftrightarrow$ Mapa:** Al hacer clic en un sismo de la lista, el mapa vuela al epicentro y abre su popup; al tocar un marcador, se resalta y posiciona en la lista.
 - **Búsqueda Espacial (Bounding Box):** Botón flotante `🔍 Buscar en esta área` para consultar sismos acotados al visor actual de la pantalla.
 - **Histograma Interactivo:** Gráfico de barras por rangos de magnitud ($<3.0$, $3.0\text{–}4.9$, $5.0\text{–}6.4$, $\ge 6.5$) que permite filtrar al instante haciendo clic en cada categoría.
 - **Exportación de Datos:** Descarga inmediata en formatos estructurados **CSV** y **GeoJSON**.
 - **URLs Compartibles:** Enlaces permanentes con estado en los parámetros de la URL (`?sismo=id`, `?mag_min=...`, etc.) con botón de copiado rápido al portapapeles.
+- **Saneamiento UTF-8:** Decodificación automática de caracteres especiales y tildes en referencias del catálogo CSN.
 
 ### 📱 Experiencia Adaptable y Móvil
 - **Layout 100% Fluido:** El mapa ocupa todo el espacio disponible sin desbordamientos.

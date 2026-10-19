@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sismos Web · Monitor Sísmico en Tiempo Real</title>
   <meta name="description" content="Dashboard interactivo de sismos: mapa, filtros por magnitud, profundidad y fecha, y estadísticas.">
+  <link rel="icon" type="image/png" href="/assets/icon_sismos.png">
+  <link rel="apple-touch-icon" href="/assets/icon_sismos.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap">
@@ -69,86 +71,145 @@
         </div>
         <button type="button" class="panel-close-btn" id="btn-close-filtros" aria-label="Cerrar panel de filtros" title="Cerrar filtros">✕</button>
       </div>
+
+      <!-- Pestañas de Navegación del Panel de Filtros -->
+      <div class="panel-tabs" role="tablist" aria-label="Vistas del panel de filtros">
+        <button type="button" class="tab-btn active" id="tab-btn-filtros-criterios" role="tab" aria-selected="true" aria-controls="pane-filtros-criterios">
+          <span class="tab-icon" aria-hidden="true">🎯</span> Criterios
+        </button>
+        <button type="button" class="tab-btn" id="tab-btn-filtros-capas" role="tab" aria-selected="false" aria-controls="pane-filtros-capas">
+          <span class="tab-icon" aria-hidden="true">🗺️</span> Capas & Leyenda
+        </button>
+      </div>
+
       <form id="filtros-form">
-        <label for="f-continente">Continente</label>
-        <select id="f-continente">
-          <option value="">Todos los continentes</option>
-        </select>
+        <!-- Pestaña 1: Criterios de Búsqueda -->
+        <div class="tab-pane active" id="pane-filtros-criterios" role="tabpanel">
+          <div class="filter-section">
+            <span class="filter-section-title">📍 Ubicación Geográfica</span>
+            <label for="f-continente">Continente</label>
+            <select id="f-continente">
+              <option value="">Todos los continentes</option>
+            </select>
 
-        <label id="lbl-f-pais">País</label>
-        <div class="custom-select-wrap" id="wrap-f-pais">
-          <button type="button" class="custom-select-trigger" id="btn-f-pais" aria-haspopup="listbox" aria-expanded="false">
-            <span id="label-f-pais">Todos los países</span>
-            <span class="chevron" aria-hidden="true">▾</span>
-          </button>
-          <div class="custom-select-dropdown" id="dropdown-f-pais" hidden>
-            <div class="search-box">
-              <span class="search-icon" aria-hidden="true">🔍</span>
-              <input type="text" class="search-input" id="search-f-pais" placeholder="Escribir país (ej. Chile)..." autocomplete="off">
+            <label id="lbl-f-pais">País</label>
+            <div class="custom-select-wrap" id="wrap-f-pais">
+              <button type="button" class="custom-select-trigger" id="btn-f-pais" aria-haspopup="listbox" aria-expanded="false">
+                <span id="label-f-pais">Todos los países</span>
+                <span class="chevron" aria-hidden="true">▾</span>
+              </button>
+              <div class="custom-select-dropdown" id="dropdown-f-pais" hidden>
+                <div class="search-box">
+                  <span class="search-icon" aria-hidden="true">🔍</span>
+                  <input type="text" class="search-input" id="search-f-pais" placeholder="Escribir país (ej. Chile)..." autocomplete="off">
+                </div>
+                <ul class="custom-select-list" id="list-f-pais" role="listbox"></ul>
+              </div>
+              <input type="hidden" id="f-pais" value="">
             </div>
-            <ul class="custom-select-list" id="list-f-pais" role="listbox"></ul>
-          </div>
-          <input type="hidden" id="f-pais" value="">
-        </div>
 
-        <label id="lbl-f-region">Región / Localidad</label>
-        <div class="custom-select-wrap" id="wrap-f-region">
-          <button type="button" class="custom-select-trigger" id="btn-f-region" aria-haspopup="listbox" aria-expanded="false">
-            <span id="label-f-region">Todas las regiones</span>
-            <span class="chevron" aria-hidden="true">▾</span>
-          </button>
-          <div class="custom-select-dropdown" id="dropdown-f-region" hidden>
-            <div class="search-box">
-              <span class="search-icon" aria-hidden="true">🔍</span>
-              <input type="text" class="search-input" id="search-f-region" placeholder="Escribir región (ej. Coquimbo)..." autocomplete="off">
+            <label id="lbl-f-region">Región / Localidad</label>
+            <div class="custom-select-wrap" id="wrap-f-region">
+              <button type="button" class="custom-select-trigger" id="btn-f-region" aria-haspopup="listbox" aria-expanded="false">
+                <span id="label-f-region">Todas las regiones</span>
+                <span class="chevron" aria-hidden="true">▾</span>
+              </button>
+              <div class="custom-select-dropdown" id="dropdown-f-region" hidden>
+                <div class="search-box">
+                  <span class="search-icon" aria-hidden="true">🔍</span>
+                  <input type="text" class="search-input" id="search-f-region" placeholder="Escribir región (ej. Coquimbo)..." autocomplete="off">
+                </div>
+                <ul class="custom-select-list" id="list-f-region" role="listbox"></ul>
+              </div>
+              <input type="hidden" id="f-region" value="">
             </div>
-            <ul class="custom-select-list" id="list-f-region" role="listbox"></ul>
           </div>
-          <input type="hidden" id="f-region" value="">
+
+          <div class="filter-section">
+            <span class="filter-section-title">📅 Rango de Fechas</span>
+            <div class="date-fields-stack">
+              <div class="date-field">
+                <label for="f-desde">Desde</label>
+                <input type="datetime-local" id="f-desde">
+              </div>
+              <div class="date-field">
+                <label for="f-hasta">Hasta</label>
+                <input type="datetime-local" id="f-hasta">
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <span class="filter-section-title">⚡ Severidad e Hipocentro</span>
+            <div class="slider-field">
+              <div class="slider-header">
+                <label for="f-mag-min">Magnitud mín.</label>
+                <output id="o-mag-min" class="slider-output">2.5</output>
+              </div>
+              <div class="mag-quick-presets" role="group" aria-label="Presets rápidos de magnitud">
+                <button type="button" class="btn-preset" data-mag="0">Todas</button>
+                <button type="button" class="btn-preset active" data-mag="2.5">≥ 2.5</button>
+                <button type="button" class="btn-preset" data-mag="4.5">≥ 4.5</button>
+                <button type="button" class="btn-preset" data-mag="6.0">≥ 6.0</button>
+              </div>
+              <input type="range" id="f-mag-min" min="0" max="9" step="0.1" value="2.5">
+            </div>
+
+            <div class="slider-field">
+              <div class="slider-header">
+                <label for="f-prof-max">Profundidad máx.</label>
+                <output id="o-prof-max" class="slider-output">700 km</output>
+              </div>
+              <input type="range" id="f-prof-max" min="0" max="700" step="10" value="700">
+            </div>
+
+            <label for="f-limit">Límite de eventos</label>
+            <select id="f-limit">
+              <option value="500">500 eventos</option>
+              <option value="2000" selected>2000 eventos</option>
+              <option value="5000">5000 eventos</option>
+            </select>
+          </div>
+
+          <div class="filter-actions-sticky">
+            <button type="submit" id="btn-aplicar" class="btn">Aplicar filtros</button>
+            <button type="button" id="btn-reset" class="btn btn-ghost">Restablecer</button>
+          </div>
         </div>
 
-        <label for="f-desde">Desde</label>
-        <input type="datetime-local" id="f-desde">
-        <label for="f-hasta">Hasta</label>
-        <input type="datetime-local" id="f-hasta">
+        <!-- Pestaña 2: Capas Geológicas & Leyenda -->
+        <div class="tab-pane" id="pane-filtros-capas" role="tabpanel" style="display: none;">
+          <div class="filter-section">
+            <span class="filter-section-title">👁️ Modo de Visualización</span>
+            <div class="view-mode-toggle" role="group" aria-label="Modo de visualización">
+              <button type="button" class="btn-mode active" data-mode="puntos" id="btn-mode-puntos" title="Círculos individuales por magnitud">Puntos</button>
+              <button type="button" class="btn-mode" data-mode="cluster" id="btn-mode-cluster" title="Agrupar sismos por densidad regional">Agrupados</button>
+              <button type="button" class="btn-mode" data-mode="calor" id="btn-mode-calor" title="Mapa de calor de densidad sísmica">Calor</button>
+            </div>
+            <p class="section-hint">Cambia entre círculos interactivos con popup, agrupación por área o mapa térmico continuo.</p>
+          </div>
 
-        <label for="f-mag-min">Magnitud mínima: <output id="o-mag-min">2.5</output></label>
-        <input type="range" id="f-mag-min" min="0" max="9" step="0.1" value="2.5">
+          <div class="filter-section">
+            <span class="filter-section-title">🌋 Capas Geológicas</span>
+            <label class="checkbox-label" for="check-placas">
+              <input type="checkbox" id="check-placas" checked>
+              <span>Mostrar placas tectónicas vectoriales</span>
+            </label>
+            <p class="section-hint">Líneas de falla y bordes entre placas geológicas con nombres oficiales y popups.</p>
+          </div>
 
-        <label for="f-prof-max">Profundidad máx (km): <output id="o-prof-max">700</output></label>
-        <input type="range" id="f-prof-max" min="0" max="700" step="10" value="700">
-
-        <label for="f-limit">Máx. eventos</label>
-        <select id="f-limit">
-          <option value="500">500</option>
-          <option value="2000" selected>2000</option>
-          <option value="5000">5000</option>
-        </select>
-
-        <label>Modo de visualización</label>
-        <div class="view-mode-toggle" role="group" aria-label="Modo de visualización">
-          <button type="button" class="btn-mode active" data-mode="puntos" id="btn-mode-puntos" title="Círculos individuales por magnitud">Puntos</button>
-          <button type="button" class="btn-mode" data-mode="cluster" id="btn-mode-cluster" title="Agrupar sismos por densidad regional">Agrupados</button>
-          <button type="button" class="btn-mode" data-mode="calor" id="btn-mode-calor" title="Mapa de calor de densidad sísmica">Calor</button>
+          <div class="filter-section">
+            <span class="filter-section-title">🎨 Leyenda Sísmica</span>
+            <ul class="legend">
+              <li><i class="lg lg-1"></i>&lt; 3.0 <span class="legend-note">(Micro / Menor)</span></li>
+              <li><i class="lg lg-2"></i>3.0 – 4.9 <span class="legend-note">(Leve a Moderado)</span></li>
+              <li><i class="lg lg-3"></i>5.0 – 6.4 <span class="legend-note">(Fuerte)</span></li>
+              <li><i class="lg lg-4"></i>≥ 6.5 <span class="legend-note">(Mayor / Destructivo)</span></li>
+              <li><i class="lg lg-plate"></i>Límites de Placas Tectónicas</li>
+            </ul>
+          </div>
         </div>
-
-        <label class="checkbox-label" for="check-placas">
-          <input type="checkbox" id="check-placas" checked>
-          <span>Mostrar placas tectónicas</span>
-        </label>
-
-        <button type="submit" id="btn-aplicar" class="btn">Aplicar filtros</button>
-        <button type="button" id="btn-reset" class="btn btn-ghost">Restablecer</button>
       </form>
-
-      <h2>Leyenda</h2>
-      <ul class="legend">
-        <li><i class="lg lg-1"></i>&lt; 3.0</li>
-        <li><i class="lg lg-2"></i>3.0 – 4.9</li>
-        <li><i class="lg lg-3"></i>5.0 – 6.4</li>
-        <li><i class="lg lg-4"></i>≥ 6.5</li>
-        <li><i class="lg lg-plate"></i>Placas tectónicas</li>
-      </ul>
     </aside>
 
     <section class="map-wrap">
@@ -162,81 +223,100 @@
       <div class="panel-header">
         <div class="panel-title-wrap">
           <span class="panel-icon" aria-hidden="true">📊</span>
-          <h2>Resumen</h2>
+          <h2>Monitoreo</h2>
         </div>
         <button type="button" class="panel-close-btn" id="btn-close-stats" aria-label="Cerrar panel de resumen" title="Cerrar resumen">✕</button>
       </div>
 
-      <!-- Tarjeta destacada: Último Sismo Registrado -->
-      <div class="latest-card" id="latest-card" style="display: none;">
-        <div class="latest-card-top">
-          <span class="latest-tag"><span class="latest-dot"></span> ÚLTIMO EVENTO</span>
-          <span class="latest-time-ago" id="latest-time-ago">—</span>
-        </div>
-        <div class="latest-card-main">
-          <div class="latest-mag-pill" id="latest-mag-pill">
-            <span class="latest-mag-val" id="latest-mag-val">–</span>
-            <span class="latest-mag-unit" id="latest-mag-unit"></span>
+      <!-- Pestañas de Navegación del Panel Derecho -->
+      <div class="panel-tabs" role="tablist" aria-label="Vistas del panel de monitoreo">
+        <button type="button" class="tab-btn active" id="tab-btn-resumen" role="tab" aria-selected="true" aria-controls="pane-resumen">
+          <span class="tab-icon" aria-hidden="true">📊</span> Resumen
+        </button>
+        <button type="button" class="tab-btn" id="tab-btn-lista" role="tab" aria-selected="false" aria-controls="pane-lista">
+          <span class="tab-icon" aria-hidden="true">📋</span> Sismos <span class="tab-badge" id="tab-badge-count">0</span>
+        </button>
+      </div>
+
+      <!-- Pestaña 1: Resumen & Métricas -->
+      <div class="tab-pane active" id="pane-resumen" role="tabpanel">
+        <!-- Tarjeta destacada: Último Sismo Registrado -->
+        <div class="latest-card" id="latest-card" style="display: none;">
+          <div class="latest-card-top">
+            <span class="latest-tag"><span class="latest-dot"></span> ÚLTIMO EVENTO</span>
+            <span class="latest-time-ago" id="latest-time-ago">—</span>
           </div>
-          <div class="latest-info">
-            <strong class="latest-ref" id="latest-ref">—</strong>
-            <span class="latest-country" id="latest-country">—</span>
+          <div class="latest-card-main">
+            <div class="latest-mag-pill" id="latest-mag-pill">
+              <span class="latest-mag-val" id="latest-mag-val">–</span>
+              <span class="latest-mag-unit" id="latest-mag-unit"></span>
+            </div>
+            <div class="latest-info">
+              <strong class="latest-ref" id="latest-ref">—</strong>
+              <span class="latest-country" id="latest-country">—</span>
+            </div>
+          </div>
+          <div class="latest-card-bottom">
+            <span class="latest-depth" id="latest-depth">Prof: —</span>
+            <button type="button" class="btn-goto-latest" id="btn-goto-latest" title="Centrar este sismo en el mapa">
+              Centrar ➔
+            </button>
           </div>
         </div>
-        <div class="latest-card-bottom">
-          <span class="latest-depth" id="latest-depth">Prof: —</span>
-          <button type="button" class="btn-goto-latest" id="btn-goto-latest" title="Centrar este sismo en el mapa">
-            Centrar ➔
+
+        <div class="stats">
+          <div class="stat"><span class="stat-val" id="s-total">–</span><span class="stat-lbl">Eventos</span></div>
+          <div class="stat"><span class="stat-val" id="s-max">–</span><span class="stat-lbl">Mag. máx</span></div>
+          <div class="stat"><span class="stat-val" id="s-avg">–</span><span class="stat-lbl">Mag. prom.</span></div>
+          <div class="stat"><span class="stat-val" id="s-prof">–</span><span class="stat-lbl">Prof. prom.</span></div>
+        </div>
+
+        <h2>Distribución por Magnitud</h2>
+        <div class="histogram-wrap" id="histogram-wrap">
+          <div class="histo-row" data-range="m1" title="Filtrar magnitud < 3.0">
+            <span class="histo-lbl">&lt; 3.0</span>
+            <div class="histo-bar-bg"><div class="histo-bar histo-bar-1" id="hbar-1" style="width: 0%"></div></div>
+            <span class="histo-cnt" id="hcnt-1">0</span>
+          </div>
+          <div class="histo-row" data-range="m2" title="Filtrar magnitud 3.0 a 4.9">
+            <span class="histo-lbl">3.0–4.9</span>
+            <div class="histo-bar-bg"><div class="histo-bar histo-bar-2" id="hbar-2" style="width: 0%"></div></div>
+            <span class="histo-cnt" id="hcnt-2">0</span>
+          </div>
+          <div class="histo-row" data-range="m3" title="Filtrar magnitud 5.0 a 6.4">
+            <span class="histo-lbl">5.0–6.4</span>
+            <div class="histo-bar-bg"><div class="histo-bar histo-bar-3" id="hbar-3" style="width: 0%"></div></div>
+            <span class="histo-cnt" id="hcnt-3">0</span>
+          </div>
+          <div class="histo-row" data-range="m4" title="Filtrar magnitud ≥ 6.5">
+            <span class="histo-lbl">≥ 6.5</span>
+            <div class="histo-bar-bg"><div class="histo-bar histo-bar-4" id="hbar-4" style="width: 0%"></div></div>
+            <span class="histo-cnt" id="hcnt-4">0</span>
+          </div>
+        </div>
+
+        <h2>Exportar y Compartir</h2>
+        <div class="tools-grid">
+          <button type="button" class="btn-tool" id="btn-export-csv" title="Descargar datos en formato CSV">
+            <span class="tool-icon">📥</span> CSV
+          </button>
+          <button type="button" class="btn-tool" id="btn-export-geojson" title="Descargar datos en formato GeoJSON">
+            <span class="tool-icon">🌐</span> GeoJSON
+          </button>
+          <button type="button" class="btn-tool" id="btn-share-url" title="Copiar enlace con vista actual">
+            <span class="tool-icon">🔗</span> Compartir
           </button>
         </div>
       </div>
 
-      <div class="stats">
-        <div class="stat"><span class="stat-val" id="s-total">–</span><span class="stat-lbl">Eventos</span></div>
-        <div class="stat"><span class="stat-val" id="s-max">–</span><span class="stat-lbl">Mag. máx</span></div>
-        <div class="stat"><span class="stat-val" id="s-avg">–</span><span class="stat-lbl">Mag. prom.</span></div>
-        <div class="stat"><span class="stat-val" id="s-prof">–</span><span class="stat-lbl">Prof. prom.</span></div>
+      <!-- Pestaña 2: Lista Completa de Sismos -->
+      <div class="tab-pane" id="pane-lista" role="tabpanel" style="display: none;">
+        <div class="event-list-header">
+          <span class="event-list-subtitle">Eventos recientes cargados</span>
+          <span class="event-list-hint">Haz clic en un sismo para centrar en el mapa</span>
+        </div>
+        <ul class="event-list" id="event-list"></ul>
       </div>
-
-      <h2>Distribución por Magnitud</h2>
-      <div class="histogram-wrap" id="histogram-wrap">
-        <div class="histo-row" data-range="m1" title="Filtrar magnitud < 3.0">
-          <span class="histo-lbl">&lt; 3.0</span>
-          <div class="histo-bar-bg"><div class="histo-bar histo-bar-1" id="hbar-1" style="width: 0%"></div></div>
-          <span class="histo-cnt" id="hcnt-1">0</span>
-        </div>
-        <div class="histo-row" data-range="m2" title="Filtrar magnitud 3.0 a 4.9">
-          <span class="histo-lbl">3.0–4.9</span>
-          <div class="histo-bar-bg"><div class="histo-bar histo-bar-2" id="hbar-2" style="width: 0%"></div></div>
-          <span class="histo-cnt" id="hcnt-2">0</span>
-        </div>
-        <div class="histo-row" data-range="m3" title="Filtrar magnitud 5.0 a 6.4">
-          <span class="histo-lbl">5.0–6.4</span>
-          <div class="histo-bar-bg"><div class="histo-bar histo-bar-3" id="hbar-3" style="width: 0%"></div></div>
-          <span class="histo-cnt" id="hcnt-3">0</span>
-        </div>
-        <div class="histo-row" data-range="m4" title="Filtrar magnitud ≥ 6.5">
-          <span class="histo-lbl">≥ 6.5</span>
-          <div class="histo-bar-bg"><div class="histo-bar histo-bar-4" id="hbar-4" style="width: 0%"></div></div>
-          <span class="histo-cnt" id="hcnt-4">0</span>
-        </div>
-      </div>
-
-      <h2>Exportar y Compartir</h2>
-      <div class="tools-grid">
-        <button type="button" class="btn-tool" id="btn-export-csv" title="Descargar datos en formato CSV">
-          <span class="tool-icon">📥</span> CSV
-        </button>
-        <button type="button" class="btn-tool" id="btn-export-geojson" title="Descargar datos en formato GeoJSON">
-          <span class="tool-icon">🌐</span> GeoJSON
-        </button>
-        <button type="button" class="btn-tool" id="btn-share-url" title="Copiar enlace con vista actual">
-          <span class="tool-icon">🔗</span> Compartir
-        </button>
-      </div>
-
-      <h2>Últimos eventos</h2>
-      <ul class="event-list" id="event-list"></ul>
     </aside>
   </main>
 

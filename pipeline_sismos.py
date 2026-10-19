@@ -264,6 +264,7 @@ def fetch_csn_dia(fecha: datetime, retries: int = 4):
         try:
             resp = requests.get(url, headers=CSN_HEADERS, timeout=30)
             if resp.status_code == 200:
+                resp.encoding = "utf-8"
                 return resp.text
             elif resp.status_code == 404:
                 log.info(f"Catálogo CSN aún no disponible (404) para {fecha.strftime('%Y-%m-%d')}")
@@ -305,6 +306,11 @@ def parsear_y_validar_csn(html_text: str):
         c0_clean = re.sub(r"<[^>]+>", "\n", c0).strip()
         lines = [l.strip() for l in c0_clean.split("\n") if l.strip()]
         lugar = lines[1] if len(lines) > 1 else (lines[0] if lines else "Chile")
+        if "Ã" in lugar:
+            try:
+                lugar = lugar.encode("latin1").decode("utf-8")
+            except Exception:
+                pass
 
         # Columna 1: Fecha UTC (formato estándar YYYY-MM-DD HH:MM:SS)
         utc_str = re.sub(r"<[^>]+>", "", tds[1]).strip()

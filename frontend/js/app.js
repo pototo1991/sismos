@@ -6,27 +6,52 @@
   // ---- Configuración inicial del mapa ----
   const INITIAL_CENTER = [-33.45, -70.66];
   const INITIAL_ZOOM = 5;
+  const WORLD_BOUNDS = L.latLngBounds(L.latLng(-85.05112878, -180), L.latLng(85.05112878, 180));
 
-  const map = L.map('map', { zoomControl: true, worldCopyJump: true }).setView(INITIAL_CENTER, INITIAL_ZOOM);
+  const map = L.map('map', {
+    zoomControl: true,
+    worldCopyJump: false,
+    minZoom: 2,
+    maxBounds: WORLD_BOUNDS,
+    maxBoundsViscosity: 1.0,
+  }).setView(INITIAL_CENTER, INITIAL_ZOOM);
 
   const darkBase = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ', maxZoom: 16,
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ', maxZoom: 16, noWrap: true, bounds: WORLD_BOUNDS,
   });
   const darkLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
-    attribution: '', maxZoom: 16,
+    attribution: '', maxZoom: 16, noWrap: true, bounds: WORLD_BOUNDS,
   });
-  const dark = L.layerGroup([darkBase, darkLabels]).addTo(map);
+  const dark = L.layerGroup([darkBase, darkLabels]);
 
   const topo = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri &mdash; Sources: GEBCO, USGS, NOAA', maxZoom: 18,
+    attribution: 'Tiles &copy; Esri &mdash; Sources: GEBCO, USGS, NOAA', maxZoom: 18, noWrap: true, bounds: WORLD_BOUNDS,
   });
 
   const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri', maxZoom: 18,
+    attribution: 'Tiles &copy; Esri', maxZoom: 18, noWrap: true, bounds: WORLD_BOUNDS,
   });
 
   const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors', maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors', maxZoom: 19, noWrap: true, bounds: WORLD_BOUNDS,
+  });
+
+  const baseLayers = {
+    '🏔️ Relieve Topográfico': topo,
+    '🌙 Modo Oscuro': dark,
+    '🛰️ Satélite': satelite,
+    '🗺️ Calles (OSM)': osm,
+  };
+
+  const savedBaseLayer = localStorage.getItem('sismos_base_layer');
+  if (savedBaseLayer && baseLayers[savedBaseLayer]) {
+    baseLayers[savedBaseLayer].addTo(map);
+  } else {
+    topo.addTo(map);
+  }
+
+  map.on('baselayerchange', (e) => {
+    localStorage.setItem('sismos_base_layer', e.name);
   });
 
   // ---- Capas de sismos (Puntos, Clusters y Mapa de Calor) ----
@@ -114,12 +139,7 @@
 
   // Selector de capas base y geológicas
   L.control.layers(
-    {
-      '🌙 Modo Oscuro': dark,
-      '🏔️ Relieve Topográfico': topo,
-      '🛰️ Satélite': satelite,
-      '🗺️ Calles (OSM)': osm,
-    },
+    baseLayers,
     {
       '🌋 Placas Tectónicas': placasLayer,
     },
@@ -131,6 +151,16 @@
   const radiusFor = (m) => Math.max(4, (m || 0) * 3);
   const fmtFecha = (iso) => (iso ? new Date(iso).toLocaleString('es-CL', { timeZone: 'UTC' }) + ' UTC' : '—');
   const fmtNum = (n, d = 1) => (typeof n === 'number' && Number.isFinite(n) ? n.toFixed(d) : '—');
+
+  function fixMojibake(str) {
+    if (!str || typeof str !== 'string' || !str.includes('Ã')) return str;
+    try {
+      const bytes = Uint8Array.from(str, (c) => c.charCodeAt(0));
+      return new TextDecoder('utf-8').decode(bytes);
+    } catch {
+      return str;
+    }
+  }
 
   function timeAgo(dateString) {
     if (!dateString) return '—';
@@ -261,7 +291,18 @@
   }
 
   function toIsoUtc(value) {
-    return value ? new Date(value + 'Z').toISOString() : null;
+    if (!value) return null;
+    const d = new Date(value);
+    return !isNaN(d.getTime()) ? d.toISOString() : null;
+  }
+
+  function setFechaDesdeHoy() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const fDesde = $('f-desde');
+    if (fDesde) fDesde.value = `${y}-${m}-${d}T00:00`;
   }
 
   // ---- Controlador de Combobox con Mini Buscador ----
@@ -682,7 +723,7 @@
       latestCard.style.display = 'none';
     }
 
-    feats.slice(0, 30).forEach((f) => {
+    feats.slice(0, 60).forEach((f) => {
       const p = f.properties;
       const [lon, lat] = f.geometry.coordinates;
       const li = el('li', 'event-item');
@@ -712,6 +753,8 @@
     $('s-max').textContent = n ? fmtNum(maxMag) : '–';
     $('s-avg').textContent = n ? fmtNum(sumMag / n) : '–';
     $('s-prof').textContent = n ? `${fmtNum(sumProf / n, 0)} km` : '–';
+    const tabBadge = $('tab-badge-count');
+    if (tabBadge) tabBadge.textContent = n.toLocaleString('es-CL');
 
     if (autoFit && coordsList.length > 0) {
       map.fitBounds(L.latLngBounds(coordsList), { maxZoom: 7, padding: [30, 30] });
@@ -720,6 +763,13 @@
 
   function highlightEventInList(id) {
     if (!id) return;
+    if (layoutEl.classList.contains('stats-collapsed')) {
+      layoutEl.classList.remove('stats-collapsed');
+      btnToggleStats?.classList.add('active');
+      btnToggleStats?.setAttribute('aria-expanded', 'true');
+      invalidateMapDelayed();
+    }
+    switchStatsTab('lista');
     document.querySelectorAll('.event-item').forEach((it) => {
       if (it.dataset.id === id) {
         it.classList.add('active');
@@ -765,6 +815,13 @@
       const res = await fetch(`/api/sismos?${params}`, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (Array.isArray(data.features)) {
+        data.features.forEach((f) => {
+          if (f && f.properties && f.properties.referencia) {
+            f.properties.referencia = fixMojibake(f.properties.referencia);
+          }
+        });
+      }
       render(data, opts.autoFit, opts);
       setStatus(`Actualizado ${new Date().toLocaleTimeString('es-CL')}`, 'ok');
 
@@ -778,6 +835,64 @@
     }
   }
 
+  // ---- Pestañas del Panel de Monitoreo ----
+  const tabBtnResumen = $('tab-btn-resumen');
+  const tabBtnLista = $('tab-btn-lista');
+  const paneResumen = $('pane-resumen');
+  const paneLista = $('pane-lista');
+
+  function switchStatsTab(tabName) {
+    if (tabName === 'lista') {
+      tabBtnLista?.classList.add('active');
+      tabBtnLista?.setAttribute('aria-selected', 'true');
+      tabBtnResumen?.classList.remove('active');
+      tabBtnResumen?.setAttribute('aria-selected', 'false');
+      paneLista?.classList.add('active');
+      paneResumen?.classList.remove('active');
+    } else {
+      tabBtnResumen?.classList.add('active');
+      tabBtnResumen?.setAttribute('aria-selected', 'true');
+      tabBtnLista?.classList.remove('active');
+      tabBtnLista?.setAttribute('aria-selected', 'false');
+      paneResumen?.classList.add('active');
+      paneLista?.classList.remove('active');
+    }
+  }
+
+  tabBtnResumen?.addEventListener('click', () => switchStatsTab('resumen'));
+  tabBtnLista?.addEventListener('click', () => switchStatsTab('lista'));
+
+  // ---- Pestañas del Panel de Filtros ----
+  const tabBtnFiltrosCriterios = $('tab-btn-filtros-criterios');
+  const tabBtnFiltrosCapas = $('tab-btn-filtros-capas');
+  const paneFiltrosCriterios = $('pane-filtros-criterios');
+  const paneFiltrosCapas = $('pane-filtros-capas');
+
+  function switchFiltrosTab(tabName) {
+    if (tabName === 'capas') {
+      tabBtnFiltrosCapas?.classList.add('active');
+      tabBtnFiltrosCapas?.setAttribute('aria-selected', 'true');
+      tabBtnFiltrosCriterios?.classList.remove('active');
+      tabBtnFiltrosCriterios?.setAttribute('aria-selected', 'false');
+      paneFiltrosCapas?.classList.add('active');
+      paneFiltrosCriterios?.classList.remove('active');
+    } else {
+      tabBtnFiltrosCriterios?.classList.add('active');
+      tabBtnFiltrosCriterios?.setAttribute('aria-selected', 'true');
+      tabBtnFiltrosCapas?.classList.remove('active');
+      tabBtnFiltrosCapas?.setAttribute('aria-selected', 'false');
+      paneFiltrosCriterios?.classList.add('active');
+      paneFiltrosCapas?.classList.remove('active');
+    }
+  }
+
+  tabBtnFiltrosCriterios?.addEventListener('click', () => switchFiltrosTab('criterios'));
+  tabBtnFiltrosCapas?.addEventListener('click', () => switchFiltrosTab('capas'));
+
+  // Inicialización explícita de pestañas al cargar
+  switchFiltrosTab('criterios');
+  switchStatsTab('resumen');
+
   // ---- Manejo de Paneles Colapsables y Responsivos ----
   const layoutEl = document.querySelector('.layout');
   const panelFiltros = $('panel-filtros');
@@ -789,6 +904,33 @@
   const backdrop = $('panel-backdrop');
 
   const isMobile = () => window.innerWidth <= 1024;
+
+  // Inicialización inteligente de paneles flotantes según resolución
+  const storedFiltros = localStorage.getItem('sismos_panel_filtros');
+  const storedStats = localStorage.getItem('sismos_panel_stats');
+
+  if (!isMobile()) {
+    if (storedFiltros === 'open') {
+      layoutEl.classList.remove('filtros-collapsed');
+      btnToggleFiltros?.classList.add('active');
+      btnToggleFiltros?.setAttribute('aria-expanded', 'true');
+    } else if (storedFiltros === 'closed' || window.innerWidth < 1440) {
+      // En laptops o si se cerró expresamente, iniciar filtros colapsado para que el mapa respire
+      layoutEl.classList.add('filtros-collapsed');
+      btnToggleFiltros?.classList.remove('active');
+      btnToggleFiltros?.setAttribute('aria-expanded', 'false');
+    }
+
+    if (storedStats === 'closed') {
+      layoutEl.classList.add('stats-collapsed');
+      btnToggleStats?.classList.remove('active');
+      btnToggleStats?.setAttribute('aria-expanded', 'false');
+    } else {
+      layoutEl.classList.remove('stats-collapsed');
+      btnToggleStats?.classList.add('active');
+      btnToggleStats?.setAttribute('aria-expanded', 'true');
+    }
+  }
 
   function invalidateMapDelayed() {
     setTimeout(() => map.invalidateSize(), 360);
@@ -810,6 +952,7 @@
       const isCollapsed = layoutEl.classList.toggle('filtros-collapsed');
       btnToggleFiltros?.classList.toggle('active', !isCollapsed);
       btnToggleFiltros?.setAttribute('aria-expanded', String(!isCollapsed));
+      localStorage.setItem('sismos_panel_filtros', isCollapsed ? 'closed' : 'open');
       invalidateMapDelayed();
     }
   }
@@ -830,6 +973,7 @@
       const isCollapsed = layoutEl.classList.toggle('stats-collapsed');
       btnToggleStats?.classList.toggle('active', !isCollapsed);
       btnToggleStats?.setAttribute('aria-expanded', String(!isCollapsed));
+      localStorage.setItem('sismos_panel_stats', isCollapsed ? 'closed' : 'open');
       invalidateMapDelayed();
     }
   }
@@ -850,6 +994,7 @@
       layoutEl.classList.add('filtros-collapsed');
       btnToggleFiltros?.classList.remove('active');
       btnToggleFiltros?.setAttribute('aria-expanded', 'false');
+      localStorage.setItem('sismos_panel_filtros', 'closed');
       invalidateMapDelayed();
     }
   }
@@ -861,6 +1006,7 @@
       layoutEl.classList.add('stats-collapsed');
       btnToggleStats?.classList.remove('active');
       btnToggleStats?.setAttribute('aria-expanded', 'false');
+      localStorage.setItem('sismos_panel_stats', 'closed');
       invalidateMapDelayed();
     }
   }
@@ -897,8 +1043,32 @@
     cargar({ autoFit: false });
   });
 
-  $('f-mag-min').addEventListener('input', (e) => { $('o-mag-min').textContent = e.target.value; });
-  $('f-prof-max').addEventListener('input', (e) => { $('o-prof-max').textContent = e.target.value; });
+  function updatePresetButtons(val) {
+    document.querySelectorAll('.btn-preset').forEach((btn) => {
+      const pMag = parseFloat(btn.dataset.mag);
+      btn.classList.toggle('active', Math.abs(pMag - val) < 0.05);
+    });
+  }
+
+  document.querySelectorAll('.btn-preset').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const val = parseFloat(btn.dataset.mag) || 0;
+      $('f-mag-min').value = val;
+      $('o-mag-min').textContent = val === 0 ? 'Todas' : val.toFixed(1);
+      updatePresetButtons(val);
+    });
+  });
+
+  $('f-mag-min').addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    $('o-mag-min').textContent = val === 0 ? 'Todas' : val.toFixed(1);
+    updatePresetButtons(val);
+  });
+
+  $('f-prof-max').addEventListener('input', (e) => {
+    $('o-prof-max').textContent = `${e.target.value} km`;
+  });
+
   $('filtros-form').addEventListener('submit', (e) => {
     e.preventDefault();
     cargar();
@@ -907,8 +1077,10 @@
 
   $('btn-reset').addEventListener('click', () => {
     $('filtros-form').reset();
-    $('o-mag-min').textContent = $('f-mag-min').value;
-    $('o-prof-max').textContent = $('f-prof-max').value;
+    setFechaDesdeHoy();
+    $('o-mag-min').textContent = '2.5';
+    $('o-prof-max').textContent = '700 km';
+    updatePresetButtons(2.5);
     actualizarPaisesParaContinente('');
     map.flyTo(INITIAL_CENTER, INITIAL_ZOOM, { duration: 1.2 });
     cargar();
@@ -1135,13 +1307,24 @@
       return true;
     }
 
+    if (params.get('desde')) {
+      $('f-desde').value = params.get('desde');
+    } else {
+      setFechaDesdeHoy();
+    }
+
+    if (params.get('hasta')) {
+      $('f-hasta').value = params.get('hasta');
+    }
+
     if (params.get('mag_min')) {
       $('f-mag-min').value = params.get('mag_min');
       $('o-mag-min').textContent = params.get('mag_min');
+      updatePresetButtons(parseFloat(params.get('mag_min')) || 0);
     }
     if (params.get('prof_max')) {
       $('f-prof-max').value = params.get('prof_max');
-      $('o-prof-max').textContent = params.get('prof_max');
+      $('o-prof-max').textContent = `${params.get('prof_max')} km`;
     }
     if (params.get('lat') && params.get('lon')) {
       const lat = parseFloat(params.get('lat'));

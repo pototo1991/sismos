@@ -42,16 +42,21 @@ Proporcionar una plataforma web rápida, moderna, segura y accesible para la vis
 - [x] **Mapa de calor (Heatmap de densidad):** Integración de `Leaflet.heat` con gradiente dinámico según severidad sísmica (verde $\rightarrow$ amarillo $\rightarrow$ naranja $\rightarrow$ rojo).
 - [x] **Selector rápido de modos de visualización:** Controles de pestaña en el panel de filtros (`[Puntos] [Agrupados] [Calor]`) más interruptor para ocultar o mostrar las placas tectónicas.
 - [x] **Selector de capas base enriquecido:** Soporte integrado para `Modo Oscuro`, `Relieve Topográfico (Esri Shaded Relief/Topo)`, `Satélite` y `Calles (OSM)`.
+- [x] **Visualización mundial sin repetición de continentes:** Configuración de teselas con `noWrap: true`, límites globales estrictos (`maxBounds`, `maxBoundsViscosity: 1.0`, `worldCopyJump: false`) y zoom mínimo controlado (`minZoom: 2`), garantizando que el planisferio se renderice una sola vez sin duplicaciones horizontales.
 
 ---
 
-### 📊 Fase 4: Analítica Interactiva y Navegación Bidireccional
-> **Objetivo:** Facilitar la interpretación de datos y la investigación.
+### 📊 Fase 4: Analítica Interactiva, Filtrado Avanzado y UX
+> **Objetivo:** Facilitar la interpretación de datos, búsqueda precisa y experiencia de usuario optimizada.
 - [x] **Sincronización Bidireccional Lista $\leftrightarrow$ Mapa:** Al hacer clic en un sismo de la lista, el mapa vuela al epicentro, abre el popup y resalta el elemento; y al hacer clic en un marcador del mapa, se resalta y desplaza automáticamente el sismo correspondiente en la lista.
+- [x] **Panel de filtros modular con pestañas:** Separación entre *"🎯 Criterios"* (ubicación, fechas, severidad) y *"🗺️ Capas & Leyenda"* (modos de visualización, capas base, simbología).
+- [x] **Selectores desplegables con búsqueda predictiva:** Componentes interactivos tipo *custom-select* con caja de búsqueda en tiempo real para países y regiones/localidades.
 - [x] **Filtro espacial por área visible (Bounding Box):** Botón flotante animado `🔍 Buscar en esta área` que detecta el movimiento del mapa y consulta sismos acotados al visor actual.
 - [x] **Histograma interactivo de magnitudes:** Barras animadas con proporciones porcentuales y conteo de sismos por escala (<3.0, 3.0-4.9, 5.0-6.4, ≥6.5) que permiten filtrar la vista al hacer clic sobre cada rango.
 - [x] **Exportación directa de datos:** Botones para generar y descargar instantáneamente archivos estructurados en formato **CSV** y **GeoJSON** con los datos filtrados en pantalla.
 - [x] **URLs compartibles y directas:** Generación de enlaces con parámetros en la URL (`?sismo=id`, `?continente=...`, `?mag_min=...`, `?lat=...&lon=...&zoom=...`) y botón de copiar enlace al portapapeles con confirmación toast.
+- [x] **Identidad visual y soporte Favicon:** Incorporación del icono oficial de la aplicación (`icon_sismos.png` en `frontend/assets/`), enlace `rel="icon"` / `apple-touch-icon` en el frontend y endpoint `/favicon.ico` con soporte `GET` y `HEAD` en FastAPI.
+- [x] **Normalización de caracteres y tildes:** Decodificación automática de caracteres especiales y diacríticos (UTF-8 / Latin-1) de referencias geográficas tanto en el pipeline ETL (`pipeline_sismos.py`) como en la API backend (`main.py`).
 
 ---
 
