@@ -109,3 +109,31 @@ Proporcionar una plataforma web rápida, moderna, segura y accesible para la vis
 - [ ] **Asistente Educativo y Preventivo ("Pregúntale al Sismólogo"):**
   - Módulo de consulta rápida para resolver inquietudes ciudadanas sobre medidas de seguridad, prevención ante sismos, comportamiento de placas tectónicas y conceptos geológicos.
 
+---
+
+### 📈 Fase 7: Métricas de Tráfico, Geolocalización por IP y Analítica Interna (Modo Silencioso)
+> **Objetivo:** Registrar el volumen real de visitas, concurrencia temporal y procedencia geográfica estimada (país, ciudad, coordenadas aproximadas del ISP y tipo de dispositivo) en PostgreSQL de forma 100% transparente y en segundo plano, sin requerir permisos invasivos ni alterar la experiencia del usuario.
+
+- [ ] **Estructura y Persistencia en PostgreSQL (Tabla `visitas`):**
+  - Creación de tabla optimizada `visitas`:
+    - `id SERIAL PRIMARY KEY`
+    - `fecha_visita TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP`
+    - `ip_origen VARCHAR(45)` (con opción de anonimización / enmascaramiento)
+    - `pais VARCHAR(50)`, `ciudad VARCHAR(100)`
+    - `latitud NUMERIC(8, 4)`, `longitud NUMERIC(8, 4)` (coordenadas estimadas del nodo ISP)
+    - `dispositivo VARCHAR(50)`, `user_agent TEXT`
+    - `ruta VARCHAR(255)`
+  - Índices sobre `fecha_visita DESC` y `pais` para reportes analíticos ultrarrápidos.
+
+- [ ] **Middleware Asíncrono no Bloqueante (FastAPI):**
+  - Captura inteligente únicamente en visitas a la página principal (`GET /`), descartando automáticamente recursos estáticos (`/css/`, `/js/`, `/assets/`, `/data/`) y endpoints de pooling frecuente para no saturar la BD.
+  - Extracción de IP real y país desde cabeceras de proxy Cloudflare (`CF-Connecting-IP`, `X-Forwarded-For`, `CF-IPCountry`).
+  - Registro diferido mediante `BackgroundTasks` de FastAPI garantizando 0 ms de sobrecarga en la respuesta al visitante.
+
+- [ ] **Módulo de Geolocalización IP (GeoIP Local):**
+  - Resolución de ciudad y coordenadas geográficas aproximadas mediante base de datos local (ej. *MaxMind GeoLite2-City* en archivo `.mmdb` local sin llamadas a APIs externas lentas).
+  - Operación silenciosa que no invoca la API `navigator.geolocation` del navegador, evitando alertas o ventanas de *"Permitir ubicación"*.
+
+- [ ] **Endpoint y Reporte Analítico para Administración (`/api/analytics/resumen`):**
+  - Endpoint de consulta interna con métricas clave: total de visitas históricas, visitas del día, principales países/ciudades de origen y desglose por dispositivo (móvil vs escritorio).
+
