@@ -33,6 +33,7 @@ Integrada con una arquitectura de ingesta multi-fuente que combina datos interna
 - **Exportación de Datos:** Descarga inmediata en formatos estructurados **CSV** y **GeoJSON**.
 - **URLs Compartibles:** Enlaces permanentes con estado en los parámetros de la URL (`?sismo=id`, `?mag_min=...`, etc.) con botón de copiado rápido al portapapeles.
 - **Saneamiento UTF-8:** Decodificación automática de caracteres especiales y tildes en referencias del catálogo CSN.
+- **Telemetría y Analítica Interna Silenciosa:** Registro asíncrono no bloqueante en PostgreSQL con geolocalización aproximada por IP (país, ciudad, coordenadas estimadas de ISP y dispositivo) y endpoint administrativo `/api/analytics/resumen`.
 
 ### 📱 Experiencia Adaptable y Móvil
 - **Layout 100% Fluido:** El mapa ocupa todo el espacio disponible sin desbordamientos.

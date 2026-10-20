@@ -65,8 +65,20 @@ def fetch_all(query: sql.Composable, params: dict | None = None) -> list[dict]:
     if pool is None:
         raise RuntimeError("Pool no inicializado")
     with pool.connection() as conn:
-        # Sesión de sólo lectura: la app no necesita modificar datos.
+        # Sesión de sólo lectura: consultas analíticas y de catálogo.
         conn.read_only = True
         with conn.cursor() as cur:
             cur.execute(query, params or {})
             return cur.fetchall()
+
+
+def execute_write(query: sql.Composable, params: dict | tuple | None = None) -> None:
+    """Ejecuta una sentencia de inserción/actualización con commit explícito."""
+    if pool is None:
+        raise RuntimeError("Pool no inicializado")
+    with pool.connection() as conn:
+        conn.read_only = False
+        with conn.cursor() as cur:
+            cur.execute(query, params or {})
+        conn.commit()
+

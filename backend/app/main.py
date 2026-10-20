@@ -6,12 +6,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from psycopg import sql
 
+from . import analytics
 from . import database as db
 from . import regions
 
@@ -24,6 +25,7 @@ FRONTEND_DIR = Path(os.getenv("FRONTEND_DIR", Path(__file__).resolve().parents[2
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.open_pool()
+    analytics.init_analytics_db()
     yield
     db.close_pool()
 
@@ -232,7 +234,39 @@ if FRONTEND_DIR.is_dir():
         return Response(status_code=404)
 
     @app.get("/", include_in_schema=False)
-    def index():
+    def index(request: Request, background_tasks: BackgroundTasks):
+        cf_ip = request.headers.get("CF-Connecting-IP")
+        xff = request.headers.get("X-Forwarded-For")
+        if cf_ip:
+            client_ip = cf_ip.strip()
+        elif xff:
+            client_ip = xff.split(",")[0].strip()
+        elif request.client:
+            client_ip = request.client.host
+        else:
+            client_ip = "127.0.0.1"
+
+        ua = request.headers.get("User-Agent", "")
+        cf_country = request.headers.get("CF-IPCountry")
+
+        background_tasks.add_task(
+            analytics.registrar_visita_tarea,
+            ip=client_ip,
+            user_agent=ua,
+            cf_country=cf_country,
+            ruta="/",
+        )
         return FileResponse(FRONTEND_DIR / "index.html")
 else:
     logger.warning("Directorio de frontend no encontrado: %s", FRONTEND_DIR)
+
+
+@app.get("/api/analytics/resumen", tags=["Analytics"])
+def get_analytics_resumen():
+    """Retorna estadísticas consolidadas de visitas, países, ciudades y dispositivos."""
+    try:
+        return analytics.obtener_resumen_visitas()
+    except Exception as e:
+        logger.error("Error al obtener resumen de analítica: %s", e)
+        raise HTTPException(status_code=500, detail="Error interno al consultar analítica")
+

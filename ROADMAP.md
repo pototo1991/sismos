@@ -114,26 +114,26 @@ Proporcionar una plataforma web rápida, moderna, segura y accesible para la vis
 ### 📈 Fase 7: Métricas de Tráfico, Geolocalización por IP y Analítica Interna (Modo Silencioso)
 > **Objetivo:** Registrar el volumen real de visitas, concurrencia temporal y procedencia geográfica estimada (país, ciudad, coordenadas aproximadas del ISP y tipo de dispositivo) en PostgreSQL de forma 100% transparente y en segundo plano, sin requerir permisos invasivos ni alterar la experiencia del usuario.
 
-- [ ] **Estructura y Persistencia en PostgreSQL (Tabla `visitas`):**
+- [x] **Estructura y Persistencia en PostgreSQL (Tabla `visitas`):**
   - Creación de tabla optimizada `visitas`:
     - `id SERIAL PRIMARY KEY`
     - `fecha_visita TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP`
-    - `ip_origen VARCHAR(45)` (con opción de anonimización / enmascaramiento)
-    - `pais VARCHAR(50)`, `ciudad VARCHAR(100)`
+    - `ip_origen VARCHAR(45)` (con enmascaramiento automático de IP para visualización)
+    - `pais VARCHAR(100)`, `ciudad VARCHAR(100)`
     - `latitud NUMERIC(8, 4)`, `longitud NUMERIC(8, 4)` (coordenadas estimadas del nodo ISP)
-    - `dispositivo VARCHAR(50)`, `user_agent TEXT`
+    - `dispositivo VARCHAR(50)`, `navegador VARCHAR(50)`, `user_agent TEXT`
     - `ruta VARCHAR(255)`
-  - Índices sobre `fecha_visita DESC` y `pais` para reportes analíticos ultrarrápidos.
+  - Índices sobre `fecha_visita DESC`, `pais` e `ip_origen` para reportes analíticos ultrarrápidos.
 
-- [ ] **Middleware Asíncrono no Bloqueante (FastAPI):**
+- [x] **Middleware Asíncrono no Bloqueante (FastAPI):**
   - Captura inteligente únicamente en visitas a la página principal (`GET /`), descartando automáticamente recursos estáticos (`/css/`, `/js/`, `/assets/`, `/data/`) y endpoints de pooling frecuente para no saturar la BD.
   - Extracción de IP real y país desde cabeceras de proxy Cloudflare (`CF-Connecting-IP`, `X-Forwarded-For`, `CF-IPCountry`).
   - Registro diferido mediante `BackgroundTasks` de FastAPI garantizando 0 ms de sobrecarga en la respuesta al visitante.
 
-- [ ] **Módulo de Geolocalización IP (GeoIP Local):**
-  - Resolución de ciudad y coordenadas geográficas aproximadas mediante base de datos local (ej. *MaxMind GeoLite2-City* en archivo `.mmdb` local sin llamadas a APIs externas lentas).
-  - Operación silenciosa que no invoca la API `navigator.geolocation` del navegador, evitando alertas o ventanas de *"Permitir ubicación"*.
+- [x] **Módulo de Geolocalización IP (GeoIP en Segundo Plano):**
+  - Estimación silenciosa de ciudad y coordenadas aproximadas de red (ISP) con caché en memoria para no repetir consultas a la misma IP.
+  - Operación 100% transparente sin invocar `navigator.geolocation` ni mostrar popups de solicitud de permisos al usuario.
 
-- [ ] **Endpoint y Reporte Analítico para Administración (`/api/analytics/resumen`):**
-  - Endpoint de consulta interna con métricas clave: total de visitas históricas, visitas del día, principales países/ciudades de origen y desglose por dispositivo (móvil vs escritorio).
+- [x] **Endpoint y Reporte Analítico para Administración (`/api/analytics/resumen`):**
+  - Endpoint de consulta interna con métricas clave: total de visitas históricas, visitas del día, gráfico de visitas de los últimos 7 días, ranking de países/ciudades y desglose por dispositivo y navegador.
 
