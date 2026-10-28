@@ -284,7 +284,7 @@ def parsear_y_validar_csn(html_text: str):
     if not html_text:
         return []
 
-    tr_pattern = re.compile(r"<tr>(.*?)</tr>", re.DOTALL | re.IGNORECASE)
+    tr_pattern = re.compile(r"<tr[^>]*>(.*?)</tr>", re.DOTALL | re.IGNORECASE)
     td_pattern = re.compile(r"<td[^>]*>(.*?)</td>", re.DOTALL | re.IGNORECASE)
 
     registros = []
