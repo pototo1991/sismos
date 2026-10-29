@@ -54,6 +54,11 @@
     localStorage.setItem('sismos_base_layer', e.name);
   });
 
+  // ---- Variables de Sesión para Enjambres, ShakeMap y Marcadores ----
+  let swarmRolesMap = new Map();
+  let activeMarkerMap = new Map();
+  let enjambresData = null;
+
   // ---- Capas de sismos (Puntos, Clusters y Mapa de Calor) ----
   let currentViewMode = 'puntos';
   const sismosLayer = L.layerGroup().addTo(map);
@@ -228,32 +233,35 @@
     }
   }
 
-  function showToast({ title, subtitle, lat, lon, marker }) {
+  function showToast({ title, subtitle, icon = '🔔', lat, lon, marker }) {
     const container = $('toast-container');
     if (!container) return;
 
     const toast = el('div', 'toast');
     const body = el('div', 'toast-body');
-    body.appendChild(el('span', 'toast-icon', '🔔'));
+    body.appendChild(el('span', 'toast-icon', icon));
     const text = el('div', 'toast-text');
     text.appendChild(el('strong', null, title));
     text.appendChild(el('span', null, subtitle));
     body.appendChild(text);
 
     const actions = el('div', 'toast-actions');
-    const btnVer = el('button', 'toast-btn', 'Ver');
-    btnVer.type = 'button';
-    btnVer.addEventListener('click', () => {
-      map.flyTo([lat, lon], 8, { duration: 1.2 });
-      if (marker) setTimeout(() => marker.openPopup(), 1250);
-      toast.remove();
-    });
+    if (typeof lat === 'number' && typeof lon === 'number' && Number.isFinite(lat) && Number.isFinite(lon)) {
+      const btnVer = el('button', 'toast-btn', 'Ver');
+      btnVer.type = 'button';
+      btnVer.addEventListener('click', () => {
+        map.flyTo([lat, lon], 8, { duration: 1.2 });
+        if (marker) setTimeout(() => marker.openPopup(), 1250);
+        toast.remove();
+      });
+      actions.appendChild(btnVer);
+    }
 
     const btnClose = el('button', 'toast-close', '✕');
     btnClose.type = 'button';
     btnClose.addEventListener('click', () => toast.remove());
+    actions.appendChild(btnClose);
 
-    actions.append(btnVer, btnClose);
     toast.append(body, actions);
     container.appendChild(toast);
 
@@ -275,13 +283,106 @@
   function buildPopup(p) {
     const box = el('div');
     box.appendChild(el('div', 'popup-mag', `M ${fmtNum(p.magnitud)} ${p.tipo_magnitud || ''}`.trim()));
+
+    // Tag de Enjambre Sísmico o Réplica si aplica
+    if (p.id && swarmRolesMap.has(p.id)) {
+      const role = swarmRolesMap.get(p.id);
+      if (role.tipo === 'enjambre') {
+        const tag = el('div', 'popup-tag-cluster popup-tag-swarm', `🔥 Enjambre (${role.total_enjambre} sismos)`);
+        tag.title = 'Haz clic para centrar el enjambre en el mapa';
+        tag.onclick = (e) => {
+          e.stopPropagation();
+          enfocarEnjambrePorId(role.enjambre_id);
+        };
+        box.appendChild(tag);
+      } else if (role.tipo === 'replica') {
+        const tag = el('div', 'popup-tag-cluster popup-tag-replica', `🔗 Réplica de M${fmtNum(role.mainshock_mag)}`);
+        tag.title = 'Haz clic para ver el sismo principal';
+        tag.onclick = (e) => {
+          e.stopPropagation();
+          irASismoPorId(role.mainshock_id);
+        };
+        box.appendChild(tag);
+      } else if (role.tipo === 'mainshock') {
+        const tag = el('div', 'popup-tag-cluster popup-tag-mainshock', `⭐ Sismo Principal (${role.total_replicas} réplicas)`);
+        box.appendChild(tag);
+      }
+    }
+
     box.appendChild(el('div', null, p.referencia || 'Sin referencia'));
     if (p.pais) box.appendChild(el('div', 'popup-row', p.pais));
     box.appendChild(el('div', 'popup-row', `${fmtFecha(p.fecha_utc)} (${timeAgo(p.fecha_utc)})`));
     box.appendChild(el('div', 'popup-row', `Profundidad: ${fmtNum(p.profundidad_km)} km`));
-    if (p.intensidad_mmi !== null) box.appendChild(el('div', 'popup-row', `Intensidad MMI: ${fmtNum(p.intensidad_mmi)}`));
+
+    // Estimación de Intensidad Percibida Mercalli (ShakeMap)
+    const intEst = p.intensidad_estimada;
+    if (intEst && intEst.mmi_epicentro_grado) {
+      const intBox = el('div', 'popup-intensity-box');
+      intBox.style.borderLeftColor = intEst.mmi_epicentro_color || '#4caf50';
+      const badge = el('span', 'popup-intensity-badge', `MMI ${intEst.mmi_epicentro_grado}`);
+      badge.style.background = intEst.mmi_epicentro_color || '#4caf50';
+      const label = el('span', 'popup-intensity-label', `${intEst.mmi_epicentro_desc}`);
+      intBox.append(badge, label);
+      box.appendChild(intBox);
+    } else if (p.intensidad_mmi !== null) {
+      box.appendChild(el('div', 'popup-row', `Intensidad MMI: ${fmtNum(p.intensidad_mmi)}`));
+    }
+
     if (p.alerta_tsunami) box.appendChild(el('div', 'popup-row', '⚠️ Alerta de tsunami'));
+
+    if (p.id) {
+      const btnAi = el('button', 'popup-ai-btn', '✨ Resumen IA');
+      btnAi.type = 'button';
+      const aiResult = el('div', 'popup-ai-result');
+      aiResult.hidden = true;
+
+      btnAi.onclick = async (e) => {
+        e.stopPropagation();
+        btnAi.disabled = true;
+        btnAi.textContent = 'Generando con Ollama…';
+        aiResult.hidden = false;
+        aiResult.textContent = 'Analizando parámetros sismológicos…';
+        try {
+          const res = await fetch(`/api/ai/boletin/${encodeURIComponent(p.id)}`, { headers: { Accept: 'application/json' } });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          aiResult.textContent = data.boletin || 'Sin información disponible.';
+          btnAi.hidden = true;
+        } catch (err) {
+          aiResult.textContent = 'No se pudo generar el boletín IA en este momento.';
+          btnAi.disabled = false;
+          btnAi.textContent = 'Reintentar ✨';
+        }
+      };
+      box.appendChild(btnAi);
+      box.appendChild(aiResult);
+    }
+
     return box;
+  }
+
+  function enfocarEnjambrePorId(enjambreId) {
+    if (!enjambresData) return;
+    const todos = [...(enjambresData.enjambres_activos || []), ...(enjambresData.enjambres_recientes || [])];
+    const swarm = todos.find((s) => s.id === enjambreId);
+    if (swarm && swarm.centroide) {
+      map.flyTo([swarm.centroide.lat, swarm.centroide.lon], 9, { duration: 1.2 });
+      showToast({
+        title: '🔥 Enjambre Sísmico Enfocado',
+        subtitle: `${swarm.cantidad_eventos} eventos en ${swarm.zona} (${swarm.duracion_horas}h)`,
+      });
+    }
+  }
+
+  function irASismoPorId(sismoId) {
+    const m = activeMarkerMap.get(sismoId);
+    if (m) {
+      const latlng = m.getLatLng();
+      map.flyTo(latlng, 9, { duration: 1.2 });
+      setTimeout(() => m.openPopup(), 1250);
+    } else {
+      cargar({ sismoId });
+    }
   }
 
   function setStatus(text, cls) {
@@ -637,6 +738,8 @@
       if (maxMag === null || p.magnitud > maxMag) maxMag = p.magnitud;
     });
 
+    activeMarkerMap = markerMap;
+
     // Actualizar histograma de magnitudes
     const maxHisto = Math.max(1, c1, c2, c3, c4);
     $('hbar-1').style.width = `${(c1 / maxHisto) * 100}%`;
@@ -709,15 +812,80 @@
       $('latest-country').textContent = lp.pais || '';
       $('latest-depth').textContent = `Prof: ${fmtNum(lp.profundidad_km)} km`;
 
+      // Intensidad estimada Mercalli (ShakeMap)
+      const intEst = lp.intensidad_estimada;
+      const intBadge = $('latest-intensity-badge');
+      const intText = $('latest-intensity-text');
+      if (intBadge && intText && intEst) {
+        intBadge.textContent = `MMI ${intEst.mmi_epicentro_grado}`;
+        intBadge.style.background = intEst.mmi_epicentro_color || '#4caf50';
+        intText.textContent = intEst.resumen_amigable || `Intensidad: Grado ${intEst.mmi_epicentro_grado} (${intEst.mmi_epicentro_desc})`;
+      }
+
       const locateLatest = () => {
         map.flyTo([llat, llon], 8, { duration: 1.2 });
         const m = markerMap.get(lp.id);
         if (m) setTimeout(() => m.openPopup(), 1250);
         if (isMobile()) closeMobilePanels();
       };
-      $('btn-goto-latest').onclick = locateLatest;
+
+      const btnGoto = $('btn-goto-latest');
+      if (btnGoto) {
+        btnGoto.onclick = (e) => {
+          e.stopPropagation();
+          locateLatest();
+        };
+      }
+
+      // Controlador de Boletín Inteligente IA en tarjeta de último sismo
+      const btnLatestAi = $('btn-latest-ai');
+      const drawerAi = $('latest-ai-drawer');
+      const skeletonAi = $('latest-ai-skeleton');
+      const textAi = $('latest-ai-p');
+      const btnCloseAi = $('btn-close-latest-ai');
+
+      if (btnLatestAi && drawerAi) {
+        btnLatestAi.onclick = async (e) => {
+          e.stopPropagation();
+          const willOpen = drawerAi.hidden;
+          drawerAi.hidden = !willOpen;
+          if (!willOpen) return;
+
+          skeletonAi.hidden = false;
+          textAi.hidden = true;
+          try {
+            const res = await fetch(`/api/ai/boletin/${encodeURIComponent(lp.id)}`, {
+              headers: { Accept: 'application/json' },
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            skeletonAi.hidden = true;
+            textAi.hidden = false;
+            textAi.textContent = data.boletin || 'Sin información disponible.';
+            if (data.modelo) {
+              const tag = $('latest-ai-model-tag');
+              if (tag) tag.textContent = data.modelo;
+            }
+          } catch (err) {
+            skeletonAi.hidden = true;
+            textAi.hidden = false;
+            textAi.textContent = 'No se pudo generar la síntesis con IA en este momento.';
+          }
+        };
+
+        if (btnCloseAi) {
+          btnCloseAi.onclick = (e) => {
+            e.stopPropagation();
+            drawerAi.hidden = true;
+          };
+        }
+      }
+
       latestCard.onclick = (e) => {
-        if (e.target.id !== 'btn-goto-latest') locateLatest();
+        if (e.target.closest('#btn-goto-latest') || e.target.closest('#btn-latest-ai') || e.target.closest('#latest-ai-drawer')) {
+          return;
+        }
+        locateLatest();
       };
     } else if (latestCard) {
       latestCard.style.display = 'none';
@@ -825,6 +993,9 @@
       render(data, opts.autoFit, opts);
       setStatus(`Actualizado ${new Date().toLocaleTimeString('es-CL')}`, 'ok');
 
+      // Consultar enjambres y réplicas en segundo plano
+      cargarEnjambres();
+
       if (opts.sismoId && data.features && data.features.length > 0) {
         const [lon, lat] = data.features[0].geometry.coordinates;
         map.flyTo([lat, lon], 8, { duration: 1.2 });
@@ -930,6 +1101,13 @@
       btnToggleStats?.classList.add('active');
       btnToggleStats?.setAttribute('aria-expanded', 'true');
     }
+  } else {
+    // En pantallas móviles (< 1024px) ambos paneles inician cerrados
+    layoutEl.classList.add('filtros-collapsed', 'stats-collapsed');
+    btnToggleFiltros?.classList.remove('active');
+    btnToggleFiltros?.setAttribute('aria-expanded', 'false');
+    btnToggleStats?.classList.remove('active');
+    btnToggleStats?.setAttribute('aria-expanded', 'false');
   }
 
   function invalidateMapDelayed() {
@@ -939,14 +1117,15 @@
   function toggleFiltros() {
     if (isMobile()) {
       const isOpen = panelFiltros.classList.toggle('mobile-open');
+      btnToggleFiltros?.classList.toggle('active', isOpen);
+      btnToggleFiltros?.setAttribute('aria-expanded', String(isOpen));
       if (isOpen) {
         panelStats.classList.remove('mobile-open');
         btnToggleStats?.classList.remove('active');
+        btnToggleStats?.setAttribute('aria-expanded', 'false');
         backdrop.classList.add('active');
-        btnToggleFiltros?.classList.add('active');
       } else {
         backdrop.classList.remove('active');
-        btnToggleFiltros?.classList.remove('active');
       }
     } else {
       const isCollapsed = layoutEl.classList.toggle('filtros-collapsed');
@@ -960,14 +1139,15 @@
   function toggleStats() {
     if (isMobile()) {
       const isOpen = panelStats.classList.toggle('mobile-open');
+      btnToggleStats?.classList.toggle('active', isOpen);
+      btnToggleStats?.setAttribute('aria-expanded', String(isOpen));
       if (isOpen) {
         panelFiltros.classList.remove('mobile-open');
         btnToggleFiltros?.classList.remove('active');
+        btnToggleFiltros?.setAttribute('aria-expanded', 'false');
         backdrop.classList.add('active');
-        btnToggleStats?.classList.add('active');
       } else {
         backdrop.classList.remove('active');
-        btnToggleStats?.classList.remove('active');
       }
     } else {
       const isCollapsed = layoutEl.classList.toggle('stats-collapsed');
@@ -983,7 +1163,9 @@
     panelStats.classList.remove('mobile-open');
     backdrop.classList.remove('active');
     btnToggleFiltros?.classList.remove('active');
+    btnToggleFiltros?.setAttribute('aria-expanded', 'false');
     btnToggleStats?.classList.remove('active');
+    btnToggleStats?.setAttribute('aria-expanded', 'false');
     setTimeout(() => map.invalidateSize(), 150);
   }
 
@@ -1016,6 +1198,11 @@
   btnCloseFiltros?.addEventListener('click', closeFiltros);
   btnCloseStats?.addEventListener('click', closeStats);
   backdrop?.addEventListener('click', closeMobilePanels);
+  map.on('click', () => {
+    if (isMobile() && (panelFiltros.classList.contains('mobile-open') || panelStats.classList.contains('mobile-open'))) {
+      closeMobilePanels();
+    }
+  });
 
   window.addEventListener('resize', () => {
     map.invalidateSize();
@@ -1025,6 +1212,11 @@
       backdrop.classList.remove('active');
       btnToggleFiltros?.classList.toggle('active', !layoutEl.classList.contains('filtros-collapsed'));
       btnToggleStats?.classList.toggle('active', !layoutEl.classList.contains('stats-collapsed'));
+    } else {
+      const isFiltrosOpen = panelFiltros.classList.contains('mobile-open');
+      const isStatsOpen = panelStats.classList.contains('mobile-open');
+      btnToggleFiltros?.classList.toggle('active', isFiltrosOpen);
+      btnToggleStats?.classList.toggle('active', isStatsOpen);
     }
   });
 
@@ -1088,7 +1280,7 @@
   });
 
   // ---- Ciclo de Polling y Cuenta Regresiva (Tiempo Real) ----
-  let pollIntervalSec = 300; // 5 minutos por defecto (sincronizado con ingesta de la BD)
+  let pollIntervalSec = 180; // 3 minutos por defecto (sincronizado con ingesta de la BD)
   let remainingSec = pollIntervalSec;
   let timerId = null;
 
@@ -1335,11 +1527,395 @@
     return false;
   }
 
+  // ---- FASE 6: Búsqueda Inteligente en Lenguaje Natural con IA ----
+  function initAiFeatures() {
+    const btnToggleAi = $('btn-toggle-ai-search');
+    const aiSearchBar = $('ai-search-bar');
+    const aiSearchInput = $('ai-search-input');
+    const btnAiSubmit = $('btn-ai-search-submit');
+    const btnAiClose = $('btn-ai-search-close');
+    const aiSubmitLabel = $('ai-submit-label');
+    const aiSubmitSpinner = $('ai-submit-spinner');
+
+    if (!btnToggleAi || !aiSearchBar) return;
+
+    if (aiSubmitSpinner) {
+      aiSubmitSpinner.setAttribute('hidden', '');
+      aiSubmitSpinner.style.display = 'none';
+    }
+
+    function toggleAiBar() {
+      const willOpen = aiSearchBar.hidden;
+      aiSearchBar.hidden = !willOpen;
+      btnToggleAi.classList.toggle('active', willOpen);
+      btnToggleAi.setAttribute('aria-expanded', String(willOpen));
+      if (willOpen && aiSearchInput) {
+        setTimeout(() => aiSearchInput.focus(), 60);
+      }
+    }
+
+    btnToggleAi.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleAiBar();
+    });
+
+    btnAiClose?.addEventListener('click', () => {
+      aiSearchBar.hidden = true;
+      btnToggleAi.classList.remove('active');
+      btnToggleAi.setAttribute('aria-expanded', 'false');
+    });
+
+    async function ejecutarBusquedaAi(query) {
+      const q = (query || (aiSearchInput ? aiSearchInput.value : '')).trim();
+      if (!q) return;
+
+      if (btnAiSubmit) btnAiSubmit.disabled = true;
+      if (aiSubmitLabel) aiSubmitLabel.textContent = 'Interpretando…';
+      if (aiSubmitSpinner) {
+        aiSubmitSpinner.removeAttribute('hidden');
+        aiSubmitSpinner.style.display = 'inline-block';
+      }
+
+      try {
+        const res = await fetch(`/api/ai/buscar?q=${encodeURIComponent(q)}`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const f = data.filtros || {};
+
+        // Aplicar Continente
+        const selectCont = $('f-continente');
+        if (f.continente) {
+          if (selectCont) {
+            selectCont.value = f.continente;
+            actualizarPaisesParaContinente(f.continente);
+          }
+        } else if (f.pais) {
+          // Si especificó país directo, resetear continente a todos
+          if (selectCont) {
+            selectCont.value = '';
+            actualizarPaisesParaContinente('');
+          }
+        } else {
+          // Si no hay continente ni país en la consulta, resetear continente
+          if (selectCont) {
+            selectCont.value = '';
+            actualizarPaisesParaContinente('');
+          }
+        }
+
+        // Aplicar País
+        if (f.pais) {
+          paisSelect.select(f.pais, f.pais);
+        } else {
+          paisSelect.reset();
+        }
+
+        // Aplicar Magnitud Mínima
+        if (Number.isFinite(f.mag_min)) {
+          $('f-mag-min').value = f.mag_min;
+          $('o-mag-min').textContent = fmtNum(f.mag_min);
+          updatePresetButtons(f.mag_min);
+        }
+
+        // Aplicar Días / Rango de Fechas
+        if (Number.isFinite(f.dias) && f.dias > 0) {
+          const now = new Date();
+          const past = new Date(now.getTime() - f.dias * 24 * 60 * 60 * 1000);
+          const y = past.getFullYear();
+          const m = String(past.getMonth() + 1).padStart(2, '0');
+          const d = String(past.getDate()).padStart(2, '0');
+          const h = String(past.getHours()).padStart(2, '0');
+          const min = String(past.getMinutes()).padStart(2, '0');
+          $('f-desde').value = `${y}-${m}-${d}T${h}:${min}`;
+          $('f-hasta').value = '';
+        }
+
+        // Aplicar Profundidad Máxima
+        if (Number.isFinite(f.prof_max)) {
+          $('f-prof-max').value = f.prof_max;
+          $('o-prof-max').textContent = `${f.prof_max} km`;
+        }
+
+        showToast({
+          icon: '✨',
+          title: 'Filtros aplicados al mapa',
+          subtitle: data.interpretacion ? `${data.interpretacion} (actualizando mapa...)` : 'Filtros configurados según tu consulta',
+        });
+        cargar({ autoFit: true });
+
+        // Cerrar barra de búsqueda para mostrar el mapa con los resultados
+        aiSearchBar.hidden = true;
+        btnToggleAi.classList.remove('active');
+        btnToggleAi.setAttribute('aria-expanded', 'false');
+      } catch (err) {
+        showToast({
+          icon: '⚠️',
+          title: 'IA no disponible',
+          subtitle: 'No se pudo interpretar la consulta en este momento.',
+        });
+      } finally {
+        if (btnAiSubmit) btnAiSubmit.disabled = false;
+        if (aiSubmitLabel) aiSubmitLabel.textContent = 'Filtrar';
+        if (aiSubmitSpinner) {
+          aiSubmitSpinner.setAttribute('hidden', '');
+          aiSubmitSpinner.style.display = 'none';
+        }
+      }
+    }
+
+    btnAiSubmit?.addEventListener('click', () => ejecutarBusquedaAi());
+
+    aiSearchInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        ejecutarBusquedaAi();
+      } else if (e.key === 'Escape') {
+        aiSearchBar.hidden = true;
+        btnToggleAi.classList.remove('active');
+      }
+    });
+
+    // Chips de sugerencia rápida
+    document.querySelectorAll('.ai-chip').forEach((chip) => {
+      chip.addEventListener('click', (e) => {
+        const query = e.currentTarget.getAttribute('data-q');
+        if (aiSearchInput) aiSearchInput.value = query;
+        ejecutarBusquedaAi(query);
+      });
+    });
+  }
+
+  // ---- Carga de Enjambres Sísmicos y Clasificación de Réplicas ----
+  async function cargarEnjambres() {
+    try {
+      const res = await fetch('/api/ai/enjambres', { headers: { Accept: 'application/json' } });
+      if (!res.ok) return;
+      const data = await res.json();
+      enjambresData = data;
+      swarmRolesMap = new Map();
+      if (data.mapa_roles) {
+        Object.entries(data.mapa_roles).forEach(([id, role]) => {
+          swarmRolesMap.set(id, role);
+        });
+      }
+
+      // Alerta visual de enjambre en la cabecera
+      const banner = $('swarm-banner');
+      const bannerText = $('swarm-banner-text');
+      const btnGoto = $('btn-swarm-goto');
+      const btnClose = $('btn-swarm-close');
+
+      if (banner && data.alerta_banner) {
+        banner.hidden = false;
+        if (bannerText) bannerText.textContent = data.alerta_banner.mensaje;
+        if (btnGoto) {
+          btnGoto.onclick = (e) => {
+            e.stopPropagation();
+            map.flyTo([data.alerta_banner.lat, data.alerta_banner.lon], 9, { duration: 1.2 });
+            showToast({
+              title: '🔥 Enjambre Sísmico Enfocado',
+              subtitle: `${data.alerta_banner.cantidad} eventos (${data.alerta_banner.mag_rango})`,
+            });
+          };
+        }
+        if (btnClose) {
+          btnClose.onclick = () => {
+            banner.hidden = true;
+          };
+        }
+      } else if (banner) {
+        banner.hidden = true;
+      }
+    } catch (e) {
+      console.warn('Error consultando enjambres:', e);
+    }
+  }
+
+  // ---- Asistente Educativo y Preventivo ("Pregúntale al Sismólogo") ----
+  function initSismologoAssistant() {
+    const btnToggle = $('btn-toggle-sismologo');
+    const drawer = $('sismologo-drawer');
+    const btnClose = $('btn-close-sismologo');
+    const form = $('sismologo-form');
+    const input = $('sismologo-input');
+    const btnSend = $('btn-sismologo-send');
+    const labelSend = $('sismologo-send-label');
+    const spinnerSend = $('sismologo-send-spinner');
+    const btnClear = $('btn-sismologo-clear');
+    const messagesContainer = $('sismologo-messages');
+
+    if (!btnToggle || !drawer) return;
+
+    let historial = [];
+
+    function toggleDrawer(open) {
+      const isCurrentlyVisible = !drawer.hasAttribute('hidden') && drawer.style.display !== 'none';
+      const shouldOpen = open !== undefined ? Boolean(open) : !isCurrentlyVisible;
+      if (shouldOpen) {
+        drawer.removeAttribute('hidden');
+        drawer.style.display = 'flex';
+      } else {
+        drawer.setAttribute('hidden', '');
+        drawer.style.display = 'none';
+      }
+      btnToggle.classList.toggle('active', shouldOpen);
+      btnToggle.setAttribute('aria-expanded', String(shouldOpen));
+      if (shouldOpen) {
+        input?.focus();
+        scrollToBottom();
+      }
+    }
+
+    btnToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleDrawer();
+    });
+
+    btnClose?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleDrawer(false);
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !drawer.hasAttribute('hidden')) {
+        toggleDrawer(false);
+      }
+    });
+
+    // Asegurar que inicie cerrado
+    drawer.setAttribute('hidden', '');
+    drawer.style.display = 'none';
+    if (spinnerSend) {
+      spinnerSend.setAttribute('hidden', '');
+      spinnerSend.style.display = 'none';
+    }
+
+    function scrollToBottom() {
+      if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    }
+
+    function formatearTextoMarkdown(texto) {
+      const docFrag = document.createDocumentFragment();
+      const lineas = texto.split('\n');
+      lineas.forEach((linea, idx) => {
+        if (idx > 0) docFrag.appendChild(document.createElement('br'));
+        const l = linea.trim();
+        if (!l) return;
+
+        const partes = l.split(/(\*\*.*?\*\*)/g);
+        partes.forEach((p) => {
+          if (p.startsWith('**') && p.endsWith('**') && p.length >= 4) {
+            const strong = document.createElement('strong');
+            strong.textContent = p.slice(2, -2);
+            docFrag.appendChild(strong);
+          } else if (p) {
+            docFrag.appendChild(document.createTextNode(p));
+          }
+        });
+      });
+      return docFrag;
+    }
+
+    function agregarMensaje(rol, texto) {
+      if (!messagesContainer) return;
+      const msgWrap = el('div', `sismologo-msg ${rol}`);
+      const bubble = el('div', 'msg-bubble');
+      bubble.appendChild(formatearTextoMarkdown(texto));
+      msgWrap.appendChild(bubble);
+      messagesContainer.appendChild(msgWrap);
+      scrollToBottom();
+      return msgWrap;
+    }
+
+    async function enviarPregunta(texto) {
+      const q = (texto || input?.value || '').trim();
+      if (!q) return;
+
+      if (input) input.value = '';
+      agregarMensaje('user', q);
+      historial.push({ rol: 'user', contenido: q });
+
+      const typingWrap = el('div', 'sismologo-msg assistant');
+      const typingBubble = el('div', 'msg-bubble');
+      typingBubble.textContent = 'Analizando con el Sismólogo… 🧑‍🔬';
+      typingWrap.appendChild(typingBubble);
+      messagesContainer?.appendChild(typingWrap);
+      scrollToBottom();
+
+      if (btnSend) btnSend.disabled = true;
+      if (labelSend) labelSend.textContent = '…';
+      if (spinnerSend) {
+        spinnerSend.removeAttribute('hidden');
+        spinnerSend.style.display = 'inline-block';
+      }
+
+      try {
+        const res = await fetch('/api/ai/sismologo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ pregunta: q, historial }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        typingWrap.remove();
+
+        const respTexto = data.respuesta || 'Sin respuesta disponible en este momento.';
+        agregarMensaje('assistant', respTexto);
+        historial.push({ rol: 'assistant', contenido: respTexto });
+      } catch (err) {
+        typingWrap.remove();
+        agregarMensaje('assistant', 'Hubo un error de conexión con el asistente sismológico. Por favor intenta nuevamente.');
+      } finally {
+        if (btnSend) btnSend.disabled = false;
+        if (labelSend) labelSend.textContent = 'Enviar';
+        if (spinnerSend) {
+          spinnerSend.setAttribute('hidden', '');
+          spinnerSend.style.display = 'none';
+        }
+        input?.focus();
+      }
+    }
+
+    form?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      enviarPregunta();
+    });
+
+    btnClear?.addEventListener('click', () => {
+      historial = [];
+      if (messagesContainer) {
+        messagesContainer.replaceChildren();
+        agregarMensaje(
+          'assistant',
+          '¡Conversación reiniciada! Pregúntame lo que necesites sobre prevención sísmica, mochila de emergencia, tsunamis o geología.'
+        );
+      }
+    });
+
+    document.querySelectorAll('.sismologo-chip').forEach((chip) => {
+      chip.addEventListener('click', (e) => {
+        const query = e.currentTarget.getAttribute('data-q');
+        if (query) {
+          if (drawer.hidden) toggleDrawer(true);
+          enviarPregunta(query);
+        }
+      });
+    });
+  }
+
   // Inicialización
   updateAudioButtonUI();
   updateTimerDisplay();
   cargarPlacasTectonicas();
   cargarRegiones();
+  initAiFeatures();
+  initSismologoAssistant();
   const hadCustomSismo = applyUrlParameters();
   if (!hadCustomSismo) cargar();
   startCountdown();

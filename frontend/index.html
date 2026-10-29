@@ -2,9 +2,12 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Sismos Web · Monitor Sísmico en Tiempo Real</title>
   <meta name="description" content="Dashboard interactivo de sismos: mapa, filtros por magnitud, profundidad y fecha, y estadísticas.">
+  <meta name="theme-color" content="#0d111c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="icon" type="image/png" href="/assets/icon_sismos.png?v=2.0">
   <link rel="apple-touch-icon" href="/assets/icon_sismos.png?v=2.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,11 +27,11 @@
       <h1>Sismos<span>Web</span></h1>
     </div>
     <div class="topbar-actions">
-      <button type="button" class="btn-panel-toggle active" id="btn-toggle-filtros" aria-expanded="true" aria-controls="panel-filtros" title="Alternar panel de filtros">
+      <button type="button" class="btn-panel-toggle" id="btn-toggle-filtros" aria-expanded="false" aria-controls="panel-filtros" title="Alternar panel de filtros">
         <span class="btn-icon" aria-hidden="true">⚙️</span>
         <span class="btn-text">Filtros</span>
       </button>
-      <button type="button" class="btn-panel-toggle active" id="btn-toggle-stats" aria-expanded="true" aria-controls="panel-stats" title="Alternar panel de resumen">
+      <button type="button" class="btn-panel-toggle" id="btn-toggle-stats" aria-expanded="false" aria-controls="panel-stats" title="Alternar panel de resumen">
         <span class="btn-icon" aria-hidden="true">📊</span>
         <span class="btn-text">Resumen</span>
       </button>
@@ -37,17 +40,28 @@
         <button type="button" class="btn-refresh" id="btn-refresh" title="Actualizar datos ahora" aria-label="Actualizar datos ahora">
           <span class="icon-refresh" id="icon-refresh" aria-hidden="true">🔄</span>
         </button>
-        <div class="live-pill" id="live-pill" title="Intervalo de consulta en vivo (sincronizado con la BD cada 5 min)">
+        <div class="live-pill" id="live-pill" title="Intervalo de consulta en vivo (sincronizado con la BD cada 3 min)">
           <span class="live-dot" aria-hidden="true"></span>
-          <span class="live-text" id="live-text">5:00</span>
+          <span class="live-text" id="live-text">3:00</span>
           <select id="select-intervalo" class="intervalo-select" aria-label="Intervalo de actualización automática">
-            <option value="300" selected>Cada 5 min (Ciclo BD)</option>
+            <option value="180" selected>Cada 3 min (Ciclo BD)</option>
+            <option value="300">Cada 5 min</option>
             <option value="120">Cada 2 min</option>
             <option value="60">Cada 1 min</option>
             <option value="0">Pausado</option>
           </select>
         </div>
       </div>
+
+      <button type="button" class="btn-panel-toggle btn-ai-toggle" id="btn-toggle-ai-search" aria-expanded="false" title="Búsqueda Inteligente en Lenguaje Natural con IA">
+        <span class="btn-icon" aria-hidden="true">✨</span>
+        <span class="btn-text">Búsqueda IA</span>
+      </button>
+
+      <button type="button" class="btn-panel-toggle btn-sismologo-toggle" id="btn-toggle-sismologo" aria-expanded="false" title="Asistente Educativo y Preventivo: Pregúntale al Sismólogo">
+        <span class="btn-icon" aria-hidden="true">🧑‍🔬</span>
+        <span class="btn-text">Pregúntale al Sismólogo</span>
+      </button>
 
       <button type="button" class="btn-panel-toggle" id="btn-sound-toggle" title="Alertas sonoras para sismos nuevos (≥ 4.5)" aria-pressed="false">
         <span class="btn-icon" id="sound-icon" aria-hidden="true">🔕</span>
@@ -57,6 +71,47 @@
       <div class="status" id="status-indicator">Conectando…</div>
     </div>
   </header>
+
+  <!-- Barra Flotante de Búsqueda Inteligente IA (Filtro Semántico) -->
+  <div class="ai-search-bar" id="ai-search-bar" hidden>
+    <div class="ai-search-header-info">
+      <span class="ai-sparkle-badge" aria-hidden="true">✨ Filtro con IA</span>
+      <span class="ai-search-desc">Escribe lo que buscas y la IA aplicará automáticamente los filtros al mapa:</span>
+    </div>
+    <div class="ai-search-inner">
+      <input type="text" id="ai-search-input" class="ai-search-input" placeholder="Ej: sismos en Chile hoy, sismos mayores a 5 en Japón..." autocomplete="off">
+      <button type="button" id="btn-ai-search-submit" class="btn-ai-submit" title="Filtrar mapa con IA">
+        <span id="ai-submit-label">Filtrar</span>
+        <span id="ai-submit-spinner" class="ai-spinner" hidden style="display: none;"></span>
+      </button>
+      <button type="button" id="btn-ai-search-close" class="btn-ai-close" title="Cerrar búsqueda IA">✕</button>
+    </div>
+    <div class="ai-chips-wrap">
+      <span class="ai-chips-title">Sugerencias:</span>
+      <button type="button" class="ai-chip" data-q="sismos en Chile hoy">🇨🇱 Chile hoy</button>
+      <button type="button" class="ai-chip" data-q="sismos mayores a 5 en Chile en los últimos 7 días">🇨🇱 Chile &gt; 5 (7 días)</button>
+      <button type="button" class="ai-chip" data-q="sismos en Japón hoy">🇯🇵 Japón hoy</button>
+      <button type="button" class="ai-chip" data-q="terremotos fuertes en América del Sur últimos 30 días">🌎 Sudamérica fuertes</button>
+      <button type="button" class="ai-chip" data-q="sismos superficiales en Perú">🇵🇪 Perú superficiales</button>
+    </div>
+  </div>
+
+  <!-- Alerta Visual de Enjambre Sísmico en la Cabecera -->
+  <aside class="swarm-banner" id="swarm-banner" hidden aria-live="assertive" role="alert">
+    <div class="swarm-banner-inner">
+      <div class="swarm-banner-icon" aria-hidden="true">⚠️</div>
+      <div class="swarm-banner-content">
+        <strong class="swarm-banner-title">Actividad Sísmica en Racimo Detectada</strong>
+        <span class="swarm-banner-text" id="swarm-banner-text">Enjambre sísmico en desarrollo: 14 eventos detectados en las últimas 6 horas</span>
+      </div>
+      <div class="swarm-banner-actions">
+        <button type="button" class="btn-swarm-action" id="btn-swarm-goto" title="Centrar y visualizar el enjambre en el mapa">
+          Ver en mapa 📍
+        </button>
+        <button type="button" class="btn-swarm-close" id="btn-swarm-close" aria-label="Descartar alerta de enjambre">✕</button>
+      </div>
+    </div>
+  </aside>
 
   <div class="toast-container" id="toast-container" aria-live="polite"></div>
 
@@ -256,11 +311,34 @@
               <span class="latest-country" id="latest-country">—</span>
             </div>
           </div>
+          <div class="latest-intensity-row" id="latest-intensity-row">
+            <span class="intensity-pill" id="latest-intensity-badge">MMI –</span>
+            <span class="intensity-text" id="latest-intensity-text">Intensidad estimada: —</span>
+          </div>
           <div class="latest-card-bottom">
             <span class="latest-depth" id="latest-depth">Prof: —</span>
-            <button type="button" class="btn-goto-latest" id="btn-goto-latest" title="Centrar este sismo en el mapa">
-              Centrar ➔
-            </button>
+            <div class="latest-card-actions">
+              <button type="button" class="btn-latest-ai" id="btn-latest-ai" title="Generar síntesis del sismo con IA local">
+                <span class="ai-sparkle" aria-hidden="true">✨</span> Resumen IA
+              </button>
+              <button type="button" class="btn-goto-latest" id="btn-goto-latest" title="Centrar este sismo en el mapa">
+                Centrar ➔
+              </button>
+            </div>
+          </div>
+          <!-- Desplegable del Boletín Sísmico Inteligente -->
+          <div class="latest-ai-drawer" id="latest-ai-drawer" hidden>
+            <div class="latest-ai-header">
+              <span class="latest-ai-title"><span class="ai-sparkle" aria-hidden="true">✨</span> Boletín Sismológico IA</span>
+              <span class="latest-ai-tag" id="latest-ai-model-tag">Llama 3.2</span>
+              <button type="button" class="btn-close-ai" id="btn-close-latest-ai" title="Cerrar boletín">✕</button>
+            </div>
+            <div class="latest-ai-content" id="latest-ai-content">
+              <div class="ai-skeleton" id="latest-ai-skeleton">
+                <span class="ai-spinner-inline"></span> Generando análisis con Ollama…
+              </div>
+              <p class="latest-ai-p" id="latest-ai-p" hidden></p>
+            </div>
           </div>
         </div>
 
@@ -319,6 +397,54 @@
       </div>
     </aside>
   </main>
+
+  <!-- Asistente Educativo y Preventivo: Pregúntale al Sismólogo -->
+  <div class="sismologo-drawer" id="sismologo-drawer" hidden style="display: none;" aria-modal="true" role="dialog" aria-label="Asistente Educativo y Preventivo: Pregúntale al Sismólogo">
+    <div class="sismologo-inner">
+      <div class="sismologo-header">
+        <div class="sismologo-title-wrap">
+          <span class="sismologo-avatar" aria-hidden="true">🧑‍🔬</span>
+          <div>
+            <div class="sismologo-title">Pregúntale al Sismólogo</div>
+            <div class="sismologo-subtitle">Dr. Hugo Sísmico · Prevención y Ciencia Sísmica</div>
+          </div>
+        </div>
+        <div class="sismologo-header-actions">
+          <span class="ai-status-tag" id="sismologo-ai-tag">✨ IA Activa</span>
+          <button type="button" class="btn-close-sismologo" id="btn-close-sismologo" aria-label="Cerrar asistente" title="Cerrar asistente">✕</button>
+        </div>
+      </div>
+      <div class="sismologo-body" id="sismologo-messages">
+        <!-- Mensaje de bienvenida inicial -->
+        <div class="sismologo-msg assistant">
+          <div class="msg-bubble">
+            ¡Hola! Soy tu asistente sismológico de <strong>SismosWeb</strong>. Puedo orientarte sobre medidas preventivas ante emergencias, cómo preparar tu mochila de supervivencia, qué hacer durante un sismo según el lugar donde estés, o conceptos como subducción, intensidades Mercalli y enjambres sísmicos. ¿En qué te puedo ayudar hoy?
+          </div>
+        </div>
+      </div>
+      <!-- Sugerencias rápidas -->
+      <div class="sismologo-chips-wrap">
+        <span class="sismologo-chips-title">Preguntas frecuentes:</span>
+        <div class="sismologo-chips">
+          <button type="button" class="sismologo-chip" data-q="¿Qué debe tener una mochila de emergencia?">🎒 Mochila de emergencia</button>
+          <button type="button" class="sismologo-chip" data-q="¿Qué hacer en un edificio o piso alto durante un sismo?">🏢 En edificio / altura</button>
+          <button type="button" class="sismologo-chip" data-q="¿Cómo saber si hay riesgo o peligro de tsunami?">🌊 Peligro de tsunami</button>
+          <button type="button" class="sismologo-chip" data-q="¿Cuál es la diferencia entre Richter/Magnitud y Mercalli?">📊 Richter vs Mercalli</button>
+          <button type="button" class="sismologo-chip" data-q="¿Qué es un enjambre sísmico y por qué ocurre?">⚠️ Enjambres sísmicos</button>
+          <button type="button" class="sismologo-chip" data-q="¿Se pueden predecir los sismos o terremotos?">🔮 ¿Se pueden predecir?</button>
+        </div>
+      </div>
+      <!-- Formulario de consulta -->
+      <form class="sismologo-form" id="sismologo-form">
+        <input type="text" id="sismologo-input" class="sismologo-input" placeholder="Pregunta algo sobre sismos, fallas o prevención..." maxlength="300" autocomplete="off">
+        <button type="submit" id="btn-sismologo-send" class="btn-sismologo-send" title="Enviar pregunta">
+          <span id="sismologo-send-label">Enviar</span>
+          <span id="sismologo-send-spinner" class="ai-spinner" hidden style="display: none;"></span>
+        </button>
+        <button type="button" id="btn-sismologo-clear" class="btn-sismologo-clear" title="Reiniciar conversación">🗑️</button>
+      </form>
+    </div>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>

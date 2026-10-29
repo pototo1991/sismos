@@ -18,7 +18,7 @@ Integrada con una arquitectura de ingesta multi-fuente que combina datos interna
 - **Capa Tectónica Vectorial:** Límites de placas tectónicas globales superpuestas (modelo *PB2002*) con identificación en español (Placa de Nazca, Sudamericana, Cocos, Cinturón de Fuego del Pacífico, etc.).
 
 ### ⏱️ Monitoreo en Vivo e Inmediatez
-- **Auto-refresco Programable:** Actualización automática cada 1, 2 o 5 minutos con temporizador visual regresivo en vivo (`MM:SS`).
+- **Auto-refresco Programable:** Actualización automática por defecto cada 3 minutos (sincronizada con el ciclo BD) o configurable a 1, 2 o 5 minutos, con temporizador visual regresivo en vivo (`MM:SS`).
 - **Tarjeta de Último Sismo Relevante:** Destacado visual con indicador pulsante, magnitud, profundidad, referencia geográfica y botón de enfoque inmediato en el mapa.
 - **Tiempos Relativos Humanizados:** Indicadores en español (*"Hace 4 min"*, *"Hace 2 h"*, *"Ayer"*) calculados dinámicamente en tiempo real.
 - **Alertas Sonoras y Toasts:** Campanilla armónica generada vía *Web Audio API* (sin archivos pesados, conmutable con botón 🔔/🔕) y notificaciones flotantes para sismos relevantes ($M \ge 4.5$).
@@ -34,6 +34,11 @@ Integrada con una arquitectura de ingesta multi-fuente que combina datos interna
 - **URLs Compartibles:** Enlaces permanentes con estado en los parámetros de la URL (`?sismo=id`, `?mag_min=...`, etc.) con botón de copiado rápido al portapapeles.
 - **Saneamiento UTF-8:** Decodificación automática de caracteres especiales y tildes en referencias del catálogo CSN.
 - **Telemetría y Analítica Interna Silenciosa:** Registro asíncrono no bloqueante en PostgreSQL con geolocalización aproximada por IP (país, ciudad, coordenadas estimadas de ISP y dispositivo) y endpoint administrativo `/api/analytics/resumen`.
+
+### 🤖 Inteligencia Artificial Local (Ollama)
+- **Buscador en Lenguaje Natural (`qwen2.5:1.5b`):** Botón `✨ Búsqueda IA` en la barra superior con barra flotante y sugerencias rápidas. Extrae dinámicamente parámetros estructurados en formato JSON (país, magnitud mínima, días transcurridos y profundidad máxima) y los aplica al instante al mapa.
+- **Generador de Boletines Sismológicos Inteligentes (`llama3.2:1b`):** Botón `✨ Resumen IA` interactivo presente en la tarjeta del último sismo y dentro del popup de cada marcador en el mapa. Redacta una síntesis proporcional, técnica y formal en español evaluando magnitud, profundidad, cercanía geográfica y descartando o confirmando riesgo de tsunami.
+- **Caché en Memoria y Fallback Resiliente:** Caché de alta velocidad para responder en 0 ms ante consultas reiteradas y degradación elegante con reglas heurísticas en caso de indisponibilidad temporal del motor de IA.
 
 ### 📱 Experiencia Adaptable y Móvil
 - **Layout 100% Fluido:** El mapa ocupa todo el espacio disponible sin desbordamientos.

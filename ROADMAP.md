@@ -16,7 +16,8 @@ Proporcionar una plataforma web rápida, moderna, segura y accesible para la vis
 - [x] **Diseño de layout flexible:** El mapa ocupa el 100% del espacio útil sin desbordamientos de página.
 - [x] **Paneles colapsables en escritorio:** Posibilidad de ocultar los paneles laterales de Filtros y Estadísticas para maximizar el área del mapa con transiciones suaves.
 - [x] **Modo Drawer / Offcanvas en móviles:** En pantallas medianas y pequeñas ($\le 1024\text{px}$), los filtros y estadísticas se despliegan como paneles laterales táctiles (*slide-over drawers*) con backdrop translúcido oscuro y botón de cierre.
-- [x] **Botones de acción rápida en topbar:** Acceso directo a "⚙️ Filtros" y "📊 Resumen" en la barra superior con retroalimentación visual de estado activo.
+- [x] **Optimización móvil para smartphones ($\le 680\text{px}$):** Barra superior compacta tipo *icon-only* sin desbordamiento horizontal, soporte para viewport dinámico (`100dvh`) y áreas seguras de notch/home-bar (`env(safe-area-inset)`), inputs a $16\text{px}$ para evitar auto-zoom molesto en Safari iOS, y cierre táctil instantáneo al interactuar con el mapa.
+- [x] **Botones de acción rápida en topbar:** Acceso directo a "⚙️ Filtros" y "📊 Resumen" en la barra superior con retroalimentación visual de estado activo sincronizada en tiempo real.
 - [x] **Cierre inteligente en móvil:** Al enviar el formulario de filtros, restablecerlos o tocar un sismo de la lista, el panel se cierra automáticamente para mostrar el mapa.
 - [x] **Redibujado automático de Leaflet:** Llamadas a `map.invalidateSize()` coordinadas con las transiciones CSS y eventos de redimensionamiento de ventana.
 
@@ -24,7 +25,7 @@ Proporcionar una plataforma web rápida, moderna, segura y accesible para la vis
 
 ### ⏱️ Fase 2: Inmediatez y Monitoreo "En Vivo"
 > **Objetivo:** Resolver la necesidad inmediata de información cuando ocurre un temblor.
-- [x] **Interruptor y ciclo de auto-refresco:** Control de actualización automática sincronizado por defecto con el ciclo de la base de datos (cada 5 min), con selector a 2 min, 1 min o Pausa, y cuenta regresiva visual en vivo (MM:SS).
+- [x] **Interruptor y ciclo de auto-refresco:** Control de actualización automática sincronizado por defecto con el ciclo de la base de datos (cada 3 min), con selector a 5 min, 2 min, 1 min o Pausa, y cuenta regresiva visual en vivo (MM:SS).
 - [x] **Botón de recarga instantánea:** Botón con animación de giro para forzar la actualización manual en cualquier momento.
 - [x] **Tarjeta de "Último sismo relevante":** Componente destacado en la parte superior del panel de resumen con indicador pulsante de evento reciente, magnitud destacada con código de color, profundidad, referencia geográfica y botón para volar y centrar el mapa en ese sismo.
 - [x] **Tiempos relativos humanizados:** Formato en español (*"Hace X min"*, *"Hace X h"*, *"Ayer"*) en el último evento, en la lista de sismos y en los popups, con actualización automática periódica cada 30 segundos.
@@ -72,42 +73,43 @@ Proporcionar una plataforma web rápida, moderna, segura y accesible para la vis
 ### 🤖 Fase 6: Inteligencia Artificial Local (Ollama en Knossos)
 > **Objetivo:** Incorporar capacidades de IA generativa, extracción semántica y análisis sismológico local aprovechando el contenedor de Ollama existente en el servidor `knossos` (con los modelos ultra livianos y rápidos `qwen2.5:1.5b` y `llama3.2:1b`), garantizando costo $0, privacidad total de datos y tiempos de respuesta inferiores a un segundo.
 
-- [ ] **Infraestructura y Conexión Docker (FastAPI $\leftrightarrow$ Ollama):**
+- [x] **Infraestructura y Conexión Docker (FastAPI $\leftrightarrow$ Ollama):**
   - Conectar el contenedor `sismos-web` con el servicio `ollama:11434` en `knossos` mediante red Docker compartida o variable `OLLAMA_BASE_URL`.
   - Configurar variables de entorno en el backend:
-    - `OLLAMA_BASE_URL=http://ollama:11434`
+    - `OLLAMA_BASE_URL=http://192.168.100.16:11434` (configurable a localhost o knossos)
     - `OLLAMA_MODEL_PARSER=qwen2.5:1.5b` (especializado en estructuración de datos y JSON)
     - `OLLAMA_MODEL_SUMMARY=llama3.2:1b` (especializado en síntesis y redacción en lenguaje natural)
-  - Cliente asíncrono optimizado con `httpx` en FastAPI con gestión estricta de timeouts (máx. 3-5 s).
-  - **Operación desacoplada (*Graceful Degradation*):** Si Ollama está ocupado, reiniciándose o no disponible, la plataforma web continúa funcionando al 100% en modo estándar sin mostrar errores al usuario.
+  - Cliente optimizado con tolerancia a fallos y timeouts configurables.
+  - **Operación desacoplada (*Graceful Degradation*):** Si Ollama está ocupado, reiniciándose o no disponible, la plataforma web continúa funcionando al 100% en modo estándar sin mostrar errores al usuario, con fallback heurístico automático.
 
-- [ ] **Buscador en Lenguaje Natural con Extracción JSON (`qwen2.5:1.5b`):**
-  - Entrada de búsqueda en lenguaje natural en la barra superior (ej. *«sismos mayores a 5 en la costa de Chile en los últimos 7 días»*, *«terremotos profundos en Japón»* o *«último temblor en Haití»*).
-  - Endpoint `/api/ai/buscar` que utiliza `qwen2.5:1.5b` con *system prompt* estricto para extraer un objeto JSON validado:
-    ```json
-    { "pais": "Chile", "mag_min": 5.0, "dias": 7, "prof_min": null, "prof_max": null }
-    ```
-  - Aplicación automática instantánea de los filtros resultantes en el mapa, panel lateral y estado de la aplicación.
+- [x] **Buscador en Lenguaje Natural con Extracción JSON (`qwen2.5:1.5b`):**
+  - Botón interactivo `✨ Búsqueda IA` en la barra superior con barra flotante y chips con consultas de ejemplo.
+  - Endpoint `/api/ai/buscar` que utiliza `qwen2.5:1.5b` con *system prompt* estricto y formato JSON para extraer criterios de búsqueda (`pais`, `mag_min`, `dias`, `prof_max`).
+  - Aplicación automática instantánea de los filtros resultantes en el mapa, sliders, selector de países y recarga dinámica con toast informativo.
 
-- [ ] **Generador de Boletines Informativos Breves (`llama3.2:1b`):**
+- [x] **Generador de Boletines Informativos Breves (`llama3.2:1b`):**
   - Botón interactivo con micro-animación `✨ Resumen IA` en la tarjeta de "Último Evento Sísmico" y dentro del popup de cada marcador en el mapa.
-  - Endpoint `/api/ai/boletin` que sintetiza un reporte conciso de 2 a 3 oraciones en español formal:
-    - Evaluación de magnitud y profundidad (superficial vs. profundo).
-    - Cercanía a centros poblados y contexto geológico (placa tectónica involucrada).
-    - Indicación de descarte de riesgo de tsunami para tranquilidad del usuario.
-  - Caché en memoria para evitar re-consultar a Ollama por el mismo evento sismológico.
+  - Endpoint `/api/ai/boletin/{sismo_id}` que sintetiza un reporte conciso en español formal:
+    - Evaluación rigurosa de magnitud y profundidad (superficial vs. intermedia/profunda).
+    - Localización geográfica precisa.
+    - Confirmación o descarte de riesgo de tsunami.
+  - Caché en memoria de alto rendimiento para responder en 0 ms ante consultas repetidas del mismo sismo.
 
-- [ ] **Detección Asistida de Enjambres Sísmicos y Clasificación de Réplicas:**
-  - Algoritmo espacio-temporal combinado con IA para detectar patrones anómalos (acumulación de múltiples sismos en un radio reducido en pocas horas).
-  - Alerta visual en la cabecera cuando se detecta actividad sísmica en racimo (*«⚠️ Enjambre sísmico en desarrollo: 14 eventos detectados en las últimas 6 horas»*).
-  - Agrupación automática de réplicas vinculadas a un sismo principal (*mainshock*).
+- [x] **Detección Asistida de Enjambres Sísmicos y Clasificación de Réplicas:**
+  - Algoritmo espacio-temporal (Haversine + ventana temporal) para detectar patrones anómalos (acumulación de múltiples sismos en un radio reducido en pocas horas).
+  - Alerta visual interactiva en la cabecera cuando se detecta actividad sísmica en racimo (*«⚠️ Enjambre sísmico en desarrollo: 19 eventos detectados en las últimas horas en Mina Collahuasi»*), con botón para centrar en el mapa.
+  - Agrupación automática y marcado de réplicas vinculadas a un sismo principal (*mainshock*) según radio de ruptura sismológico de Båth/Gardner-Knopoff.
+  - Endpoint `/api/ai/enjambres` con caché en memoria.
 
-- [ ] **Estimación de Intensidad Percibida (*ShakeMap IA* / Escala Mercalli):**
-  - Cálculo rápido de la intensidad sentida probable en localidades cercanas según la magnitud de momento, la profundidad hipocentral y la atenuación por distancia.
-  - Presentación amigable en el detalle del sismo: *«Intensidad estimada: Grado IV (Moderado en costa) / Grado II (Leve en valle central)»*.
+- [x] **Estimación de Intensidad Percibida (*ShakeMap IA* / Escala Mercalli):**
+  - Cálculo de la intensidad sentida probable (MMI Grados I a X+) en el epicentro y localidades cercanas según la magnitud de momento, profundidad hipocentral y modelo empírico GMPE de atenuación logarítmica.
+  - Presentación amigable y colorimétrica en el detalle del sismo y en la tarjeta de último evento: *«Intensidad estimada: Grado IV (Moderado en zona epicentral) / Grado II (Leve a 100 km)»*.
+  - Endpoint `/api/ai/intensidad/{sismo_id}` e inclusión directa en las propiedades GeoJSON de cada evento.
 
-- [ ] **Asistente Educativo y Preventivo ("Pregúntale al Sismólogo"):**
-  - Módulo de consulta rápida para resolver inquietudes ciudadanas sobre medidas de seguridad, prevención ante sismos, comportamiento de placas tectónicas y conceptos geológicos.
+- [x] **Asistente Educativo y Preventivo ("Pregúntale al Sismólogo"):**
+  - Módulo interactivo ("Dr. Hugo Sísmico") para resolver inquietudes ciudadanas sobre medidas de seguridad, mochila de emergencia, qué hacer en edificios altos, peligro de tsunami, Cinturón de Fuego, comportamiento de placas tectónicas y diferencias entre Magnitud y Mercalli.
+  - Botón interactivo en cabecera `🧑‍🔬 Pregúntale al Sismólogo`, ventana modal/drawer con diseño conversacional y chips con consultas frecuentes.
+  - Endpoint `POST /api/ai/sismologo` integrado con Ollama local y base de conocimiento experta para respuesta garantizada en modo fallback.
 
 ---
 

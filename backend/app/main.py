@@ -1,4 +1,5 @@
 """API FastAPI de sismos + servicio del frontend estático."""
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -12,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from psycopg import sql
 
+from . import ai
 from . import analytics
 from . import database as db
 from . import regions
@@ -55,8 +57,8 @@ CSP = (
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    # Allow-list de métodos HTTP: la app es de sólo lectura.
-    if request.method not in ("GET", "HEAD"):
+    # Allow-list de métodos HTTP: GET, HEAD y POST (para búsqueda y endpoints de IA)
+    if request.method not in ("GET", "HEAD", "POST"):
         return JSONResponse({"detail": "Método no permitido"}, status_code=405)
     response = await call_next(request)
     response.headers["Content-Security-Policy"] = CSP
@@ -144,9 +146,44 @@ def get_sismos(
         except Exception:
             logger.warning("bbox inválido: %s", bbox)
 
+    PAIS_MAP = {
+        "japon": ["Japan", "Japan region", "Japan Earthquake"],
+        "japón": ["Japan", "Japan region", "Japan Earthquake"],
+        "japan": ["Japan", "Japan region", "Japan Earthquake"],
+        "peru": ["Peru"],
+        "perú": ["Peru"],
+        "mexico": ["Mexico"],
+        "méxico": ["Mexico"],
+        "estados unidos": ["United States"],
+        "eeuu": ["United States"],
+        "usa": ["United States"],
+        "united states": ["United States"],
+        "italia": ["Italy"],
+        "italy": ["Italy"],
+        "turquia": ["Turkey"],
+        "turquía": ["Turkey"],
+        "turkey": ["Turkey"],
+        "nueva zelanda": ["New Zealand"],
+        "new zealand": ["New Zealand"],
+        "haiti": ["Haiti"],
+        "haití": ["Haiti"],
+        "grecia": ["Greece"],
+        "greece": ["Greece"],
+        "filipinas": ["Philippines"],
+        "philippines": ["Philippines"],
+        "espana": ["Spain"],
+        "españa": ["Spain"],
+        "spain": ["Spain"],
+    }
+
     if pais and pais.strip():
-        where_clauses.append(sql.SQL("pais_inferido = %(pais)s"))
-        params["pais"] = pais.strip()
+        clean_p = pais.strip().lower()
+        if clean_p in PAIS_MAP:
+            where_clauses.append(sql.SQL("pais_inferido = ANY(%(paises_alias)s)"))
+            params["paises_alias"] = PAIS_MAP[clean_p]
+        else:
+            where_clauses.append(sql.SQL("pais_inferido ILIKE %(pais)s"))
+            params["pais"] = f"%{pais.strip()}%"
     elif continente and continente.strip():
         paises_cont = regions.get_paises_para_continente(continente.strip(), db)
         if paises_cont:
@@ -205,6 +242,12 @@ def get_sismos(
                 "referencia": _clean_text(r["lugar"]),
                 "pais": r["pais_inferido"],
                 "intensidad_mmi": _num(r["intensidad_mmi"]),
+                "intensidad_estimada": ai.estimar_intensidad_mercalli({
+                    "id": r["id"],
+                    "magnitud": _num(r["magnitud"]),
+                    "profundidad_km": _num(r["profundidad_km"]),
+                    "referencia": _clean_text(r["lugar"]),
+                }),
                 "alerta_tsunami": bool(r["alerta_tsunami"]),
                 "estado": r["estado"],
             },
@@ -269,4 +312,160 @@ def get_analytics_resumen():
     except Exception as e:
         logger.error("Error al obtener resumen de analítica: %s", e)
         raise HTTPException(status_code=500, detail="Error interno al consultar analítica")
+
+
+# ---- Endpoints de Inteligencia Artificial Local (Fase 6) ----
+@app.get("/api/ai/status", tags=["IA"])
+def get_ai_status():
+    """Verifica el estado de Ollama y los modelos configurados."""
+    return ai.check_ollama_status()
+
+
+@app.get("/api/ai/boletin/{sismo_id}", tags=["IA"])
+async def get_ai_boletin(sismo_id: str):
+    """Genera o recupera de caché un boletín informativo sintético para el sismo solicitado."""
+    clean_id = sismo_id.strip()
+    if not clean_id or len(clean_id) > 64:
+        raise HTTPException(400, "ID de sismo inválido")
+
+    query = sql.SQL(
+        """
+        SELECT id, fecha_hora_utc, magnitud, tipo_magnitud, lugar, pais_inferido,
+               profundidad_km, intensidad_mmi, alerta_tsunami, estado
+        FROM {tabla}
+        WHERE id = %(sismo_id)s
+        LIMIT 1
+        """
+    ).format(tabla=db.SISMOS_TABLE)
+
+    try:
+        rows = db.fetch_all(query, {"sismo_id": clean_id})
+    except Exception as e:
+        logger.error("Error al buscar sismo %s para boletín: %s", clean_id, e)
+        raise HTTPException(500, "Error interno al consultar sismo")
+
+    if not rows:
+        raise HTTPException(404, f"Sismo con ID '{clean_id}' no encontrado")
+
+    sismo = rows[0]
+    try:
+        res = await asyncio.to_thread(ai.generar_boletin_sismo, sismo)
+        return res
+    except Exception as e:
+        logger.error("Error generando boletín IA: %s", e)
+        # Fallback de emergencia
+        return {
+            "sismo_id": clean_id,
+            "boletin": ai._boletin_fallback(sismo),
+            "fuente": "fallback_error",
+            "modelo": None,
+        }
+
+
+@app.api_route("/api/ai/buscar", methods=["GET", "POST"], tags=["IA"])
+async def ai_search(request: Request, q: str | None = Query(None, max_length=250)):
+    """Extrae filtros estructurados de búsqueda a partir de una consulta en lenguaje natural."""
+    query_text = q
+    if request.method == "POST":
+        try:
+            body = await request.json()
+            if isinstance(body, dict) and "q" in body:
+                query_text = str(body["q"])
+        except Exception:
+            pass
+
+    if not query_text or not query_text.strip():
+        raise HTTPException(400, "Debe proporcionar una consulta de búsqueda (parámetro 'q')")
+
+    clean_text = query_text.strip()[:250]
+    return await asyncio.to_thread(ai.interpretar_busqueda_nl, clean_text)
+
+
+@app.get("/api/ai/intensidad/{sismo_id}", tags=["IA"])
+def get_ai_intensidad(sismo_id: str):
+    """Calcula la intensidad percibida probable (Escala Mercalli Modificada / ShakeMap) para un sismo."""
+    clean_id = sismo_id.strip()
+    if not clean_id or len(clean_id) > 64:
+        raise HTTPException(400, "ID de sismo inválido")
+
+    query = sql.SQL(
+        """
+        SELECT id, fecha_hora_utc, magnitud, tipo_magnitud, lugar, pais_inferido,
+               profundidad_km, intensidad_mmi, alerta_tsunami
+        FROM {tabla}
+        WHERE id = %(sismo_id)s
+        LIMIT 1
+        """
+    ).format(tabla=db.SISMOS_TABLE)
+
+    try:
+        rows = db.fetch_all(query, {"sismo_id": clean_id})
+    except Exception as e:
+        logger.error("Error al buscar sismo %s para intensidad: %s", clean_id, e)
+        raise HTTPException(500, "Error interno al consultar sismo")
+
+    if not rows:
+        raise HTTPException(404, f"Sismo con ID '{clean_id}' no encontrado")
+
+    sismo = rows[0]
+    return ai.estimar_intensidad_mercalli(sismo)
+
+
+@app.get("/api/ai/enjambres", tags=["IA"])
+def get_ai_enjambres(dias: int = Query(7, ge=1, le=30)):
+    """Detecta enjambres sísmicos activos y clasifica réplicas vinculadas a sismos principales."""
+    query = sql.SQL(
+        """
+        SELECT id, fecha_hora_utc, magnitud, tipo_magnitud, lugar, pais_inferido,
+               profundidad_km,
+               COALESCE(ST_X(geom), longitud::float8) AS lon,
+               COALESCE(ST_Y(geom), latitud::float8)  AS lat
+        FROM {tabla}
+        WHERE fecha_hora_utc >= NOW() - (%(dias)s || ' days')::interval
+          AND magnitud IS NOT NULL
+        ORDER BY fecha_hora_utc DESC
+        LIMIT 2000
+        """
+    ).format(tabla=db.SISMOS_TABLE)
+
+    try:
+        rows = db.fetch_all(query, {"dias": dias})
+    except Exception as e:
+        logger.error("Error al consultar sismos para análisis de enjambres: %s", e)
+        raise HTTPException(500, "Error interno al analizar enjambres")
+
+    return ai.analizar_enjambres_y_replicas(rows)
+
+
+@app.post("/api/ai/sismologo", tags=["IA"])
+async def post_ai_sismologo(request: Request):
+    """Asistente Educativo y Preventivo: responde dudas ciudadanas sobre sismología y emergencias."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Cuerpo JSON inválido")
+
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Payload debe ser un objeto JSON")
+
+    pregunta = str(body.get("pregunta", "")).strip()
+    if not pregunta:
+        raise HTTPException(400, "Debe enviar el campo 'pregunta'")
+
+    clean_pregunta = pregunta[:350]
+    historial = body.get("historial")
+    if not isinstance(historial, list):
+        historial = []
+
+    # Validar elementos del historial
+    clean_historial = []
+    for item in historial[-6:]:
+        if isinstance(item, dict) and "rol" in item and "contenido" in item:
+            clean_historial.append({
+                "rol": "user" if item["rol"] == "user" else "assistant",
+                "contenido": str(item["contenido"])[:300],
+            })
+
+    return await asyncio.to_thread(ai.consultar_asistente_sismologo, clean_pregunta, clean_historial)
+
 
