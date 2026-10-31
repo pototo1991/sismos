@@ -966,7 +966,7 @@ def consultar_asistente_sismologo(pregunta: str, historial: list[dict[str, str]]
         prompt=prompt_usuario,
         system=system_prompt,
         format_json=False,
-        num_predict=350,
+        num_predict=450,
     )
 
     if respuesta_ia and len(respuesta_ia.strip()) > 15:
