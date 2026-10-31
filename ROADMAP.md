@@ -71,14 +71,14 @@ Proporcionar una plataforma web rápida, moderna, segura y accesible para la vis
 ---
 
 ### 🤖 Fase 6: Inteligencia Artificial Local (Ollama en Knossos)
-> **Objetivo:** Incorporar capacidades de IA generativa, extracción semántica y análisis sismológico local aprovechando el contenedor de Ollama existente en el servidor `knossos` (con los modelos ultra livianos y rápidos `qwen2.5:1.5b` y `llama3.2:1b`), garantizando costo $0, privacidad total de datos y tiempos de respuesta inferiores a un segundo.
+> **Objetivo:** Incorporar capacidades de IA generativa, extracción semántica y análisis sismológico local aprovechando el contenedor de Ollama existente en el servidor `knossos` (con los modelos de alta precisión `qwen2.5:3b` y `llama3.2:3b`), garantizando costo $0, privacidad total de datos, Grounding RAG científico y alta coherencia semántica.
 
 - [x] **Infraestructura y Conexión Docker (FastAPI $\leftrightarrow$ Ollama):**
   - Conectar el contenedor `sismos-web` con el servicio `ollama:11434` en `knossos` mediante red Docker compartida o variable `OLLAMA_BASE_URL`.
   - Configurar variables de entorno en el backend:
     - `OLLAMA_BASE_URL=http://192.168.100.16:11434` (configurable a localhost o knossos)
-    - `OLLAMA_MODEL_PARSER=qwen2.5:1.5b` (especializado en estructuración de datos y JSON)
-    - `OLLAMA_MODEL_SUMMARY=llama3.2:1b` (especializado en síntesis y redacción en lenguaje natural)
+    - `OLLAMA_MODEL_PARSER=qwen2.5:3b` (especializado en estructuración de datos y JSON estricto)
+    - `OLLAMA_MODEL_SUMMARY=llama3.2:3b` (especializado en síntesis, redacción en lenguaje natural y asistencia con RAG)
   - Cliente optimizado con tolerancia a fallos y timeouts configurables.
   - **Operación desacoplada (*Graceful Degradation*):** Si Ollama está ocupado, reiniciándose o no disponible, la plataforma web continúa funcionando al 100% en modo estándar sin mostrar errores al usuario, con fallback heurístico automático.
 

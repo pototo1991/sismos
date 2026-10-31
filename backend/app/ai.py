@@ -20,9 +20,9 @@ logger = logging.getLogger("sismos.ai")
 
 # ---- Configuración ----
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://192.168.100.16:11434").rstrip("/")
-OLLAMA_MODEL_PARSER = os.getenv("OLLAMA_MODEL_PARSER", "qwen2.5:1.5b")
-OLLAMA_MODEL_SUMMARY = os.getenv("OLLAMA_MODEL_SUMMARY", "llama3.2:1b")
-OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "25.0"))
+OLLAMA_MODEL_PARSER = os.getenv("OLLAMA_MODEL_PARSER", "qwen2.5:3b")
+OLLAMA_MODEL_SUMMARY = os.getenv("OLLAMA_MODEL_SUMMARY", "llama3.2:3b")
+OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "35.0"))
 
 # Caché en memoria: boletines, enjambres y respuestas
 _BOLETIN_CACHE: dict[str, dict[str, Any]] = {}
@@ -31,7 +31,13 @@ _SWARM_CACHE: dict[str, Any] = {"data": None, "timestamp": 0.0}
 _SWARM_CACHE_TTL = 90.0  # 90 segundos de validez para análisis de enjambres
 
 
-def _call_ollama_generate(model: str, prompt: str, system: str | None = None, format_json: bool = False) -> str | None:
+def _call_ollama_generate(
+    model: str,
+    prompt: str,
+    system: str | None = None,
+    format_json: bool = False,
+    num_predict: int = 180,
+) -> str | None:
     """Envía una petición síncrona a la API /api/generate de Ollama."""
     url = f"{OLLAMA_BASE_URL}/api/generate"
     payload: dict[str, Any] = {
@@ -40,7 +46,7 @@ def _call_ollama_generate(model: str, prompt: str, system: str | None = None, fo
         "stream": False,
         "options": {
             "temperature": 0.2 if format_json else 0.4,
-            "num_predict": 180,
+            "num_predict": num_predict,
         },
     }
     if system:
@@ -858,18 +864,9 @@ def _tiene_palabra(palabras: list[str], texto: str) -> bool:
     return False
 
 
-def _obtener_respuesta_fallback_sismologo(pregunta: str) -> str:
-    """Selecciona la mejor respuesta pedagógica según palabras clave exactas de la consulta."""
+def _buscar_conocimiento_relevante(pregunta: str) -> str | None:
+    """Busca en la base de conocimiento sismológico verificada para hacer Grounding (RAG ligero)."""
     q = pregunta.lower().strip()
-
-    # Saludo cordial
-    if _tiene_palabra(["hola", "buenos dias", "buenas tardes", "buenas noches", "saludos", "que tal", "como estas", "cómo estás"], q):
-        return (
-            "🧑‍🔬 **¡Hola! Soy el Dr. Hugo Sísmico**, sismólogo de guardia en SismosWeb.\n\n"
-            "Estoy aquí para responder tus dudas sobre actividad sísmica, cómo prepararte ante un terremoto, "
-            "explicar cómo funcionan las placas tectónicas o analizar eventos recientes. ¿En qué puedo orientarte hoy?"
-        )
-
     if _tiene_palabra(["mochila", "kit", "provision", "provisiones", "suministro", "suministros", "emergencia"], q):
         return BASE_CONOCIMIENTO_SISMOLOGO["mochila"]
     if _tiene_palabra(["edificio", "depto", "departamento", "piso", "ascensor", "altura"], q):
@@ -886,6 +883,24 @@ def _obtener_respuesta_fallback_sismologo(pregunta: str) -> str:
         return BASE_CONOCIMIENTO_SISMOLOGO["predecir"]
     if _tiene_palabra(["ramon", "ramón", "falla"], q):
         return BASE_CONOCIMIENTO_SISMOLOGO["san_ramon"]
+    return None
+
+
+def _obtener_respuesta_fallback_sismologo(pregunta: str) -> str:
+    """Selecciona la mejor respuesta pedagógica según palabras clave exactas de la consulta."""
+    q = pregunta.lower().strip()
+
+    # Saludo cordial
+    if _tiene_palabra(["hola", "buenos dias", "buenas tardes", "buenas noches", "saludos", "que tal", "como estas", "cómo estás"], q):
+        return (
+            "🧑‍🔬 **¡Hola! Soy el Dr. Hugo Sísmico**, sismólogo de guardia en SismosWeb.\n\n"
+            "Estoy aquí para responder tus dudas sobre actividad sísmica, cómo prepararte ante un terremoto, "
+            "explicar cómo funcionan las placas tectónicas o analizar eventos recientes. ¿En qué puedo orientarte hoy?"
+        )
+
+    conocimiento = _buscar_conocimiento_relevante(pregunta)
+    if conocimiento:
+        return conocimiento
 
     return (
         "🧑‍🔬 **Recomendación Sismológica General:**\n"
@@ -898,7 +913,7 @@ def _obtener_respuesta_fallback_sismologo(pregunta: str) -> str:
 
 
 def consultar_asistente_sismologo(pregunta: str, historial: list[dict[str, str]] | None = None) -> dict[str, Any]:
-    """Genera una respuesta educativa y de prevención ante sismos mediante Ollama o fallback experto."""
+    """Genera una respuesta educativa y de prevención ante sismos mediante Ollama con Grounding RAG o fallback experto."""
     texto = pregunta.strip()
     if not texto:
         return {
@@ -907,15 +922,20 @@ def consultar_asistente_sismologo(pregunta: str, historial: list[dict[str, str]]
             "modelo": None,
         }
 
+    # Búsqueda de conocimiento técnico para grounding (RAG)
+    conocimiento_experto = _buscar_conocimiento_relevante(texto)
+
     system_prompt = (
         "Eres el Dr. Hugo Sísmico, Sismólogo y Especialista en Gestión del Riesgo y Emergencias Sísmicas de SismosWeb. "
         "Tu misión es educar a la ciudadanía en español con un tono profesional, empático, claro y pedagógico. "
-        "Reglas:\n"
-        "1. Si el usuario te saluda o pregunta cómo estás, salúdalo con calidez y preséntate brevemente invitándolo a consultar.\n"
-        "2. Basa tus recomendaciones en protocolos oficiales (SENAPRED, USGS, CSN).\n"
-        "3. Aclara con firmeza científica que los sismos NO se pueden predecir en fecha y hora exacta.\n"
-        "4. Sé conciso y claro: usa viñetas cortas para listas o pasos de acción prácticos.\n"
-        "5. Máximo 160 palabras por respuesta."
+        "Reglas estrictas e inviolables:\n"
+        "1. Tu campo de estudio es EXCLUSIVAMENTE la GEOFÍSICA Y SISMOLOGÍA. Jamás vincules conceptos geológicos con biología o insectos "
+        "(ejemplo crítico: un 'enjambre sísmico' son terremotos y fallas geológicas, NUNCA hormigas, abejas ni animales).\n"
+        "2. Si se te provee 'Información técnica de referencia', debes basar obligatoriamente tu respuesta en ella de forma rigurosa.\n"
+        "3. Si el usuario saluda, salúdalo con calidez y preséntate brevemente.\n"
+        "4. Basa recomendaciones de seguridad en protocolos oficiales (SENAPRED, USGS, CSN).\n"
+        "5. Aclara con firmeza científica que los sismos NO se pueden predecir en fecha y hora exacta.\n"
+        "6. Sé conciso y claro (máximo 150 palabras)."
     )
 
     # Construir contexto con los últimos turnos de conversación
@@ -926,7 +946,16 @@ def consultar_asistente_sismologo(pregunta: str, historial: list[dict[str, str]]
             rol = "Usuario" if h.get("rol") == "user" else "Sismólogo"
             contexto_str += f"{rol}: {h.get('contenido', '')}\n"
 
+    referencia_bloque = ""
+    if conocimiento_experto:
+        referencia_bloque = (
+            f"--- INFORMACIÓN CIENTÍFICA DE REFERENCIA (ÚSALA PARA RESPONDER) ---\n"
+            f"{conocimiento_experto}\n"
+            f"-------------------------------------------------------------------\n\n"
+        )
+
     prompt_usuario = (
+        f"{referencia_bloque}"
         f"{contexto_str}"
         f"Usuario: {texto}\n"
         f"Dr. Hugo Sísmico:"
@@ -937,11 +966,27 @@ def consultar_asistente_sismologo(pregunta: str, historial: list[dict[str, str]]
         prompt=prompt_usuario,
         system=system_prompt,
         format_json=False,
+        num_predict=350,
     )
 
     if respuesta_ia and len(respuesta_ia.strip()) > 15:
+        texto_resp = respuesta_ia.strip()
+        resp_lower = texto_resp.lower()
+        # Filtro de seguridad anti-alucinación biológica para enjambres (hormigas, abejas, hongos, bacterias, etc.)
+        palabras_biologicas = [
+            "hormiga", "abeja", "insecto", "bicho", "hongo", "hongos", "planta",
+            "bacteria", "animal", "célula", "celula", "espora", "toxina",
+        ]
+        if "enjambre" in texto.lower() and any(palabra in resp_lower for palabra in palabras_biologicas):
+            logger.warning("Alucinación biológica detectada en respuesta de Ollama sobre enjambre. Activando fallback experto.")
+            return {
+                "respuesta": _obtener_respuesta_fallback_sismologo(texto),
+                "fuente": "fallback_experto",
+                "modelo": OLLAMA_MODEL_SUMMARY,
+            }
+
         return {
-            "respuesta": respuesta_ia.strip(),
+            "respuesta": texto_resp,
             "fuente": "ia",
             "modelo": OLLAMA_MODEL_SUMMARY,
         }
